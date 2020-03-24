@@ -100,9 +100,10 @@ while(4)
   last if $line =~ /^(q|x|quit|exit|zz)/;
   my @line = split /\s+/, $line;
   
-  my $time = parse_time( @line );
+  my ( $time, $repeat ) = parse_time( @line );
   print scalar localtime( time() ) . "\n";
   print scalar localtime( $time  ) . "\n";
+  print $repeat . "\n";
   }
 
 
@@ -149,7 +150,7 @@ sub parse_time
       }
     if( /^next/ )
       {
-      return parse_time_next( $ta );
+      $ts = parse_time_next( $ta );
       }
     elsif( /^repeat/ )
       {
@@ -168,7 +169,7 @@ sub parse_time
       die "invalid timespec at [$_]\n";
       }  
     }
-  return $ts;
+  return ( $ts, $tr );
 }
 
 sub parse_time_in
