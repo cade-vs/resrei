@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 ##############################################################################
 ##
-##  RESREI calendar reimder todo
+##  RESREI calendar remainder todo
 ##  2019 (c) Vladi Belperchinov-Shabanski "Cade"
 ##  <cade@bis.bg> <cade@biscom.net> <cade@cpan.org>
 ##
@@ -9,6 +9,8 @@
 ##
 ##############################################################################
 use strict;
+use Data::Dumper;
+use Term::ReadLine::Tiny;
 use Data::Tools::Time;
 
 =pod
@@ -20,14 +22,13 @@ use Data::Tools::Time;
   
   next tue at 12:00
   next apr 1st
-  next last tue of mar
 
   repeat every year|month|day    at 11:06
   repeat every 6hrs
 
 =cut
 
-my %WEEK_DAYS = (
+my %WEEK_DAYS_SHORT = (
                 
                 mon => 1,
                 tue => 2,
@@ -36,6 +37,10 @@ my %WEEK_DAYS = (
                 fri => 5,
                 sat => 6,
                 sun => 7,
+                
+                );
+
+my %WEEK_DAYS_LONG = (
                 
                 monday    => 1,
                 tuesday   => 2,
@@ -46,8 +51,10 @@ my %WEEK_DAYS = (
                 sunday    => 7,
                 
                 );
+                
+my %WEEK_DAYS = ( %WEEK_DAYS_SHORT, %WEEK_DAYS_LONG );
 
-my %MONTHS = (
+my %MONTHS_SHORT = (
                 
                 jan =>  1,
                 feb =>  2,
@@ -62,6 +69,9 @@ my %MONTHS = (
                 nov => 11,
                 dec => 12,
                 
+                );
+                
+my %MONTHS_LONG = (
                 january   =>  1,
                 february  =>  2,
                 march     =>  3,
@@ -77,9 +87,17 @@ my %MONTHS = (
                 
                 );
 
+my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
+                
+my @AC_WORDS = ( qw[ in on at next repeat noon ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
+                
+my $rl = Term::ReadLine::Tiny->new( "" );
+$rl->autocomplete( \&autocomplete );
+        
 while(4)
   {
-  my $line = <STDIN>;
+  my $line = $rl->readline( "resrei: " );
+  last if $line =~ /^(q|x|quit|exit|zz)/;
   my @line = split /\s+/, $line;
   
   my $time = parse_time( @line );
@@ -88,6 +106,30 @@ while(4)
   }
 
 
+sub autocomplete
+{
+  my $rl   = shift;
+  my $text = shift;
+  
+  return $text unless $text =~ /(\S+)$/;
+  my $co = $1;
+
+  my @rc = grep /^$co/, @AC_WORDS;
+
+  return $text unless @rc;
+  
+  if( @rc == 1 )
+    {
+    $text .= substr( $rc[0], length( $co ) ) . ' ';
+    }
+  else
+    {
+    print "\n@rc\nresrei: $text";
+    }  
+  
+  #print Dumper( \@_ );
+  return $text;
+}
 
 
 sub parse_time
@@ -108,11 +150,17 @@ sub parse_time
     if( /^next/ )
       {
       return parse_time_next( $ta );
-      next;
       }
     elsif( /^repeat/ )
       {
       $tr = parse_time_in( $ta );
+      next;
+      }
+    elsif( /^at/ )
+      {
+      my $at = parse_time_at( $ta );
+      my ( $tsd ) = utime_split_to_utt( $ts );
+      $ts = utime_join_utt( $tsd, $at );
       next;
       }
     else
@@ -135,13 +183,6 @@ sub parse_time_in
     if( /^repeat/ )
       {
       }
-    elsif( /^(\d+)d(ays?)?$/ )         # days day d
-      {
-      $tt += $1 * 24 * 60 * 60;
-      next;
-      }
-      # TODO: months, years, weeks
-#    elsif( /^(\d+)(h(ours?)?|hrs?)$/ ) # hours hour hrs hr h 
     elsif( /^(\d+)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
@@ -211,8 +252,33 @@ sub parse_time_next
       }
     else
       {
-      unshift @$ta, $_;
-      return $tt;
+      die "invalid timespec at *next* [$_]\n";
+      }  
+    }
+  
+  return $tt;
+}
+
+sub parse_time_at
+{
+  my $ta = shift;
+  
+  my $tt;
+
+  while( @$ta )
+    {
+    $_ = shift @$ta;
+    if( $_ =~ /(\d+)(:(\d+)?(:(\d+))?)?/ )
+      {
+      $tt = $1 * 60 * 60 + $3 * 60 + $5;
+      }
+    elsif( lc $_ eq 'noon' )
+      {
+      $tt = 12 * 60 * 60;
+      }
+    else
+      {
+      die "invalid timespec at *next* [$_]\n";
       }  
     }
   
