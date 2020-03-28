@@ -103,7 +103,7 @@ while(4)
   my ( $time, $repeat ) = parse_time( @line );
   print scalar localtime( time() ) . "\n";
   print scalar localtime( $time  ) . "\n";
-  print $repeat . "\n";
+  print Dumper( $repeat ) . "\n";
   }
 
 
@@ -138,7 +138,7 @@ sub parse_time
   my $ta = [ @_ ];
   
   my $ts = time();
-  my $tr = 0;
+  my $tr;
   
   while( @$ta )
     {
@@ -154,7 +154,7 @@ sub parse_time
       }
     elsif( /^repeat/ )
       {
-      $tr = parse_time_in( $ta );
+      $tr = parse_time_repeat( $ta );
       next;
       }
     elsif( /^at/ )
@@ -172,27 +172,83 @@ sub parse_time
   return ( $ts, $tr );
 }
 
+sub parse_time_repeat
+{
+  my $ta = shift;
+  
+  my $tr = {};
+
+  while( @$ta )
+    {
+    $_ = shift @$ta;
+    $a = 0;
+    
+    if( /^(\d+)$/ )
+      {
+      $a = $1;
+      $_ = lc shift @$ta;
+      }
+
+    if( /^every/ )
+      {
+      next;
+      }
+    elsif( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
+      {
+      my $type = uc substr( $2, 0, 1 );
+      my $add = $1 || $a;
+
+      my $tt;
+      $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
+      $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
+      $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
+      
+      $tr->{ 'SECONDS' } += $tt;
+
+      $tr->{ 'MONTHS'  } += $add if $type eq 'M'; # months
+      $tr->{ 'YEARS'   } += $add if $type eq 'Y';  # years
+      next;
+      }
+    else
+      {
+      unshift @$ta, $_;
+      return $tr;
+      }  
+    }
+  
+  return $tr;
+}
+
 sub parse_time_in
 {
   my $ta = shift;
   
   my $tt;
 
+  my $a;
   while( @$ta )
     {
-    $_ = shift @$ta;
-    if( /^repeat/ )
+    $_ = lc shift @$ta;
+    $a = 0;
+    
+    if( /^(\d+|a)$/ )
       {
+      $a = $1 eq 'a' ? 1 : $1;
+      $_ = lc shift @$ta;
       }
-    elsif( /^(\d+)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
+    
+    if( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
-      $tt +=          $1 * 60 * 60 if $type eq 'H'; # hours
-      $tt +=     $1 * 24 * 60 * 60 if $type eq 'D'; # days
-      $tt += $1 * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
+      my $add = $1;
+      $add = 1 if ! $add and $a;
+      
+      $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
+      $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
+      $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
 
-      $tt = utime_add_ymd( $tt, 0, $1, 0 ) if $type eq 'M'; # months
-      $tt = utime_add_ymd( $tt, $1, 0, 0 ) if $type eq 'Y';  # years
+      $tt = utime_add_ymd( $tt, 0, $add, 0 ) if $type eq 'M'; # months
+      $tt = utime_add_ymd( $tt, $add, 0, 0 ) if $type eq 'Y';  # years
       next;
       }
     elsif( /^(\d+)(m(in(utes?)?)?)$/ ) # minutes minute min m
