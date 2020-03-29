@@ -137,7 +137,8 @@ sub parse_time
 {
   my $ta = [ @_ ];
   
-  my $ts = time();
+  my $now = time();
+  my $ts = $now;
   my $tr;
   
   while( @$ta )
@@ -148,9 +149,22 @@ sub parse_time
       $ts = time() + parse_time_in( $ta );
       next;
       }
-    if( /^next/ )
+    elsif( /^on/ )
       {
-      $ts = parse_time_next( $ta );
+      $ts = parse_time_on( $ta, $now );
+      my $tss = $ts > 0 ? scalar localtime $ts : 'n/a';
+      die "cannot set time in the past [$tss]\n" if $ts > 0 and $ts < $now;
+      die "invalid date/time\n" if $ts < $now;
+      next;
+      }
+    elsif( /^next/ )
+      {
+      $ts = parse_time_next( $ta, $now );
+      next;
+      }
+    elsif( /^tom(orrow)?$/ )
+      {
+      $ts = utime_add_ymd( $now, 0, 0, 1 );
       }
     elsif( /^repeat/ )
       {
@@ -219,6 +233,123 @@ sub parse_time_repeat
   return $tr;
 }
 
+sub parse_time_on
+{
+  my $ta  = shift;
+  my $now = shift;
+  
+  my $day;
+  my $mon;
+  my $year;
+  
+  my $a;
+  
+  while( @$ta )
+    {
+    $_ = lc shift @$ta;
+
+    if( /^(\d\d\d\d)$/ )
+      {
+      $year = $1;
+      next;
+      }
+    elsif( /^(\d+)(st|nd)?$/ )
+      {
+      $day = $1;
+      next;
+      }
+    elsif( exists $MONTHS{ $_ } )
+      {
+      $mon = $MONTHS{ $_ };
+      next;
+      }
+    elsif( /^(\d\d\d\d)[\.\/\-](\d\d?)[\.\/\-](\d\d?)$/ )
+      {
+      my ( $year, $mon, $day ) = ( $1, $2, $3 );
+      next;
+      }
+    else
+      {
+      unshift @$ta, $_;
+      last;
+      }  
+    }
+
+  print STDERR "DEBUG: *on* year [$year] month [$mon] day [$day]\n";
+
+  my ( $yc ) = utime_to_ymdhms( $now );
+  return 0 if $year > 0 and $year < $yc;
+  return 0 if $mon  > 0 and $mon  >  12;
+
+  # try to figure the date
+  if( $year > 0 and $mon > 0 and $day > 0 )
+    {
+        print "111777\n";
+    return utime_from_ymdhms( $year, $mon, $day );
+    }
+  elsif( $year > 0 and $mon > 0 )
+    {
+        print "111666\n";
+    return utime_from_ymdhms( $year, $mon, 1 );
+    }
+  elsif( $mon > 0 and $day > 0 )
+    {
+        print "111555\n";
+    return 0 if $day > get_year_month_days( $yc, $mon );
+    my $uc = utime_from_ymdhms( $yc, $mon, $day );
+        print "111555-1( $yc, $mon, $day )[$uc]\n";
+    if( $now > $uc )
+      {
+        print "111555-2\n";
+      return 0 if $day > get_year_month_days( $yc + 1, $mon );
+        print "111555-3\n";
+      return utime_from_ymdhms( $yc + 1, $mon, $day );
+      }
+    else
+      {
+      return $uc;
+      }  
+    }
+  elsif( $mon > 0 )  
+    {
+        print "111444\n";
+    my $uc = utime_from_ymdhms( $yc, $mon, 1 );
+    return $now > $uc ? utime_from_ymdhms( $yc + 1, $mon, 1 ) : $uc;
+    }
+  elsif( $day > 0 )  
+    {
+    my ( $yc, $mc ) = utime_to_ymdhms( $now );
+    return 0 if $day > get_year_month_days( $yc, $mc );
+    my $uc = utime_from_ymdhms( $yc, $mc, $day );
+    if( $now > $uc )
+      {
+      if( $mc == 12 )
+        {
+        print "111\n";
+        return 0 if $day > get_year_month_days( $yc + 1, 1 );
+        return utime_from_ymdhms( $yc + 1, 1, $day )
+        }
+      else
+        {
+        print "222( $yc, $mc + 1 )\n";
+        return 0 if $day > get_year_month_days( $yc, $mc + 1 );
+        return utime_from_ymdhms( $yc, $mc + 1, $day )
+        }  
+      }
+    else
+      {
+        print "333\n";
+      return $uc;
+      }  
+    }
+  elsif( $year > 0 )  
+    {
+    return utime_from_ymdhms( $year, 1, 1 );
+    }
+
+  die "invalid timespec at *on* year [$year] month [$mon] day [$day]\n";
+}
+
 sub parse_time_in
 {
   my $ta = shift;
@@ -271,10 +402,10 @@ sub parse_time_in
   return $tt;
 }
 
-
 sub parse_time_next
 {
-  my $ta = shift;
+  my $ta  = shift;
+  my $now = shift;
   
   my $tt;
 
@@ -283,8 +414,6 @@ sub parse_time_next
     $_ = shift @$ta;
     if( my $day = $WEEK_DAYS{ lc $_ } )
       {
-      my $now = time();
-      
       my $nod = utime_get_dow( $now );
       
       my $diffd = $day > $nod ? $day - $nod : $day + 7 - $nod;
@@ -293,8 +422,6 @@ sub parse_time_next
       }
     elsif( my $mon = $MONTHS{ lc $_ } )
       {
-      my $now = time();
-      
       my $nom = utime_get_moy( $now );
       
       my $diffm = $mon > $nom ? $mon - $nom : $mon + 12 - $nom;
@@ -303,9 +430,15 @@ sub parse_time_next
       }
     elsif( /^year$/i )
       {
-      my $now = time();
-      
       return utime_goto_first_doy( utime_add_ymd( $now, 1, 0, 0 ) );
+      }
+    elsif( /^month$/i )
+      {
+      return utime_goto_first_dom( utime_add_ymd( $now, 0, 1, 0 ) );
+      }
+    elsif( /^day$/i )
+      {
+      return utime_add_ymd( $now, 0, 0, 1 );
       }
     else
       {
@@ -316,6 +449,7 @@ sub parse_time_next
   return $tt;
 }
 
+# TODO: am/pm?
 sub parse_time_at
 {
   my $ta = shift;
