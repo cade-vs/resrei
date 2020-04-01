@@ -196,6 +196,8 @@ sub parse_time_repeat
     {
     $_ = shift @$ta;
     $a = 0;
+
+print STDERR "repeat: [$_]\n";
     
     if( /^(\d+)$/ )
       {
@@ -207,10 +209,24 @@ sub parse_time_repeat
       {
       next;
       }
+    if( /^(dayly|monthly|yearly)/ )
+      {
+      my $type = uc substr( $1, 0, 1 );
+
+      my $tt;
+      $tt +=     1 * 24 * 60 * 60 if $type eq 'D'; # dayly
+      $tr->{ 'SECONDS' } += $tt;
+
+      $tr->{ 'MONTHS'  } += 1 if $type eq 'M'; # months
+      $tr->{ 'YEARS'   } += 1 if $type eq 'Y';  # years
+      next;
+      }
     elsif( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
       my $add = $1 || $a;
+
+      $add = 1 unless $add > 0;
 
       my $tt;
       $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
@@ -275,7 +291,7 @@ sub parse_time_on
       }  
     }
 
-  print STDERR "DEBUG: *on* year [$year] month [$mon] day [$day]\n";
+#  print STDERR "DEBUG: *on* year [$year] month [$mon] day [$day]\n";
 
   my ( $yc ) = utime_to_ymdhms( $now );
   return 0 if $year > 0 and $year < $yc;
@@ -284,25 +300,19 @@ sub parse_time_on
   # try to figure the date
   if( $year > 0 and $mon > 0 and $day > 0 )
     {
-        print "111777\n";
     return utime_from_ymdhms( $year, $mon, $day );
     }
   elsif( $year > 0 and $mon > 0 )
     {
-        print "111666\n";
     return utime_from_ymdhms( $year, $mon, 1 );
     }
   elsif( $mon > 0 and $day > 0 )
     {
-        print "111555\n";
     return 0 if $day > get_year_month_days( $yc, $mon );
     my $uc = utime_from_ymdhms( $yc, $mon, $day );
-        print "111555-1( $yc, $mon, $day )[$uc]\n";
     if( $now > $uc )
       {
-        print "111555-2\n";
       return 0 if $day > get_year_month_days( $yc + 1, $mon );
-        print "111555-3\n";
       return utime_from_ymdhms( $yc + 1, $mon, $day );
       }
     else
@@ -312,7 +322,6 @@ sub parse_time_on
     }
   elsif( $mon > 0 )  
     {
-        print "111444\n";
     my $uc = utime_from_ymdhms( $yc, $mon, 1 );
     return $now > $uc ? utime_from_ymdhms( $yc + 1, $mon, 1 ) : $uc;
     }
@@ -325,20 +334,17 @@ sub parse_time_on
       {
       if( $mc == 12 )
         {
-        print "111\n";
         return 0 if $day > get_year_month_days( $yc + 1, 1 );
         return utime_from_ymdhms( $yc + 1, 1, $day )
         }
       else
         {
-        print "222( $yc, $mc + 1 )\n";
         return 0 if $day > get_year_month_days( $yc, $mc + 1 );
         return utime_from_ymdhms( $yc, $mc + 1, $day )
         }  
       }
     else
       {
-        print "333\n";
       return $uc;
       }  
     }
@@ -402,6 +408,7 @@ sub parse_time_in
   return $tt;
 }
 
+# TODO: next month 11th
 sub parse_time_next
 {
   my $ta  = shift;
