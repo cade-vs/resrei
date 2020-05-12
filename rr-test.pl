@@ -27,6 +27,9 @@ use Data::Tools::Time;
   repeat every 6hrs
   repeat yearly
   repeat daily
+  
+  on jun 12th at 11
+  on 2021 march 1st
 
 =cut
 
