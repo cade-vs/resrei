@@ -25,6 +25,8 @@ use Data::Tools::Time;
 
   repeat every year|month|day    at 11:06
   repeat every 6hrs
+  repeat yearly
+  repeat daily
 
 =cut
 
@@ -209,7 +211,7 @@ print STDERR "repeat: [$_]\n";
       {
       next;
       }
-    if( /^(dayly|monthly|yearly)/ )
+    if( /^(daily|monthly|yearly)/ )
       {
       my $type = uc substr( $1, 0, 1 );
 
