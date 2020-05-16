@@ -2,7 +2,7 @@
 ##############################################################################
 ##
 ##  RESREI calendar remainder todo
-##  2019 (c) Vladi Belperchinov-Shabanski "Cade"
+##  2019-202 (c) Vladi Belperchinov-Shabanski "Cade"
 ##  <cade@bis.bg> <cade@biscom.net> <cade@cpan.org>
 ##
 ##  LICENSE: GPLv2
@@ -94,7 +94,7 @@ my %MONTHS_LONG = (
 
 my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
                 
-my @AC_WORDS = ( qw[ in on at next repeat noon ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
+my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
                 
 my $rl = Term::ReadLine::Tiny->new( "" );
 $rl->autocomplete( \&autocomplete );
@@ -204,9 +204,9 @@ sub parse_time_repeat
 
 print STDERR "repeat: [$_]\n";
     
-    if( /^(\d+)$/ )
+    if( /^(\d+|a)$/ )
       {
-      $a = $1;
+      $a = $1 eq 'a' ? 1 : $1;
       $_ = lc shift @$ta;
       }
 
@@ -382,8 +382,7 @@ sub parse_time_in
     if( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
-      my $add = $1;
-      $add = 1 if ! $add and $a;
+      my $add = $1 || $a;
       
       $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
       $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
@@ -393,14 +392,18 @@ sub parse_time_in
       $tt = utime_add_ymd( $tt, $add, 0, 0 ) if $type eq 'Y';  # years
       next;
       }
-    elsif( /^(\d+)(m(in(utes?)?)?)$/ ) # minutes minute min m
+    elsif( /^(\d*)(m(in(utes?)?)?)$/ ) # minutes minute min m
       {
-      $tt += $1 * 60;
+      my $add = $1 || $a;
+
+      $tt += $add * 60;
       next;
       }
-    elsif( /^(\d+)(s(ec(ond)?s?)?)$/ ) # seconds second secs sec s
+    elsif( /^(\d*)(s(ec(ond)?s?)?)$/ ) # seconds second secs sec s
       {
-      $tt += $1;
+      my $add = $1 || $a;
+
+      $tt += $add;
       next;
       }
     else
