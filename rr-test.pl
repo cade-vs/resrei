@@ -13,25 +13,47 @@ use Data::Dumper;
 use Term::ReadLine::Tiny;
 use Data::Tools::Time;
 
-=pod
+my $HELP = <<END_OF_HELP;
 
-  in 2days 8hrs 11min 23sec
-  in 2h
-  in 1week
-  in 2mo
+COMMANDS:
+
+  NEW <TIMESPEC>       -- create new event
+  MOVE <ID> <TIMESPEC> -- move event with id to new time
+  LIST                 -- list upcoming events
+  LIST OLD             -- list passed events
+
+TIMESPEC:
+
+  SPECIFY DAY IN THE FUTURE:
   
-  next tue at 12:00
-  next apr 1st
+    in 2days 8hrs 11min 23sec
+    in 2h
+    in 1week
+    in 2mo
 
-  repeat every year|month|day    at 11:06
-  repeat every 6hrs
-  repeat yearly
-  repeat daily
+  SPECIFY EXACT DATE:
+
+    on jun 12th at 11
+    on 2021 march 1st
+
+  SPECIFY TIME:
   
-  on jun 12th at 11
-  on 2021 march 1st
+    at 11
+    at 2:30 pm
 
-=cut
+  SPECIFY DAY & TIME IN THE FUTURE:
+  
+    next tue at 12:00
+    next apr 1st
+
+  SPECIFY REPEAT PERIOD:
+
+    repeat every year|month|day  at 11:06
+    repeat every 6hrs
+    repeat yearly
+    repeat daily
+
+END_OF_HELP
 
 my %WEEK_DAYS_SHORT = (
                 
@@ -94,7 +116,7 @@ my %MONTHS_LONG = (
 
 my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
                 
-my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
+my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months am pm ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
                 
 my $rl = Term::ReadLine::Tiny->new( "" );
 $rl->autocomplete( \&autocomplete );
@@ -102,22 +124,58 @@ $rl->autocomplete( \&autocomplete );
 while(4)
   {
   my $line = $rl->readline( "resrei: " );
-  last if $line =~ /^(q|x|quit|exit|zz)/;
   my @line = split /\s+/, $line;
+  my $cmd = shift @line;
+  next unless $cmd;
   
-  my ( $time, $repeat ) = parse_time( @line );
+  last if $cmd =~ /^(q|x|quit|exit|zz)/i;
+
+  exec_cmd( $cmd, \@line );
+  }
+
+### COMMANDS #################################################################
+
+sub exec_cmd
+{
+  my $cmd  = shift;
+  my $args = shift;
+
+  return cmd_new( $args ) if $cmd =~ /^(new)/i;
+  print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
+}
+
+sub cmd_help
+{
+  my $args = shift;
+  
+  print $HELP;
+}
+
+sub cmd_new
+{
+  my $args = shift;
+
+  my ( $time, $repeat ) = parse_time( @$args );
   print scalar localtime( time() ) . "\n";
   print scalar localtime( $time  ) . "\n";
   print Dumper( $repeat ) . "\n";
-  }
 
+  my $name = $rl->readline( "new event name: " );
 
+  my $id = int(rand(111));
+
+  print "new event $id with name: $name\n";
+  my $commit = $rl->readline( "press ENTER to commit or 'NO'+ENTER to cancel? " );
+}
+
+##############################################################################
+ 
 sub autocomplete
 {
   my $rl   = shift;
   my $text = shift;
   
-  return $text unless $text =~ /(\S+)$/;
+  return $text unless $text =~ /\d*(\S+?)$/;
   my $co = $1;
 
   my @rc = grep /^$co/, @AC_WORDS;
@@ -137,6 +195,7 @@ sub autocomplete
   return $text;
 }
 
+### PARSE TIME ###############################################################
 
 sub parse_time
 {
@@ -156,6 +215,7 @@ sub parse_time
       }
     elsif( /^on/ )
       {
+      next if $ta->[0] eq 'next';
       $ts = parse_time_on( $ta, $now );
       my $tss = $ts > 0 ? scalar localtime $ts : 'n/a';
       die "cannot set time in the past [$tss]\n" if $ts > 0 and $ts < $now;
@@ -202,7 +262,7 @@ sub parse_time_repeat
     $_ = shift @$ta;
     $a = 0;
 
-print STDERR "repeat: [$_]\n";
+#print STDERR "repeat: [$_]\n";
     
     if( /^(\d+|a)$/ )
       {
@@ -474,9 +534,18 @@ sub parse_time_at
   while( @$ta )
     {
     $_ = shift @$ta;
-    if( $_ =~ /(\d+)(:(\d+)?(:(\d+))?)?/ )
+    if( $_ =~ /(\d+)(:(\d+)?(:(\d+))?)?(am|pm)?/i )
       {
-      $tt = $1 * 60 * 60 + $3 * 60 + $5;
+      my $h = $1;
+      my $m = $3;
+      my $s = $5;
+      my $p = uc $6;
+
+      $p = uc shift @$ta if ! $p and $ta->[0] =~ /^am|pm$/i;
+      
+      $h += 12 if $p eq 'PM' and $h >= 0 and $h <= 12;
+      
+      $tt = $h * 60 * 60 + $m * 60 + $s;
       }
     elsif( lc $_ eq 'noon' )
       {
@@ -490,3 +559,5 @@ sub parse_time_at
   
   return $tt;
 }
+
+##############################################################################
