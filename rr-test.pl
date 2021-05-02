@@ -53,6 +53,10 @@ TIMESPEC:
     repeat yearly
     repeat daily
 
+EXAMPLES:
+
+    new on next sat at 11:30 repeat weekly
+
 END_OF_HELP
 
 my %WEEK_DAYS_SHORT = (
@@ -165,7 +169,7 @@ sub cmd_new
   my $id = int(rand(111));
 
   print "new event $id with name: $name\n";
-  my $commit = $rl->readline( "press ENTER to commit or 'NO'+ENTER to cancel? " );
+  my $commit = $rl->readline( "save this event? [Y]es/No? " );
 }
 
 ##############################################################################
@@ -274,12 +278,13 @@ sub parse_time_repeat
       {
       next;
       }
-    if( /^(daily|monthly|yearly)/ )
+    if( /^(daily|monthly|yearly|weekly)/ )
       {
       my $type = uc substr( $1, 0, 1 );
 
       my $tt;
       $tt +=     1 * 24 * 60 * 60 if $type eq 'D'; # dayly
+      $tt +=     7 * 24 * 60 * 60 if $type eq 'W'; # weekly
       $tr->{ 'SECONDS' } += $tt;
 
       $tr->{ 'MONTHS'  } += 1 if $type eq 'M'; # months
@@ -418,7 +423,7 @@ sub parse_time_on
     return utime_from_ymdhms( $year, 1, 1 );
     }
 
-  die "invalid timespec at *on* year [$year] month [$mon] day [$day]\n";
+  die "invalid timespec during *ON* year [$year] month [$mon] day [$day]\n";
 }
 
 sub parse_time_in
@@ -517,7 +522,9 @@ sub parse_time_next
       }
     else
       {
-      die "invalid timespec at *next* [$_]\n";
+      unshift @$ta, $_;
+      return $tt;
+      #die "invalid timespec during *NEXT* [$_]\n";
       }  
     }
   
@@ -553,7 +560,9 @@ sub parse_time_at
       }
     else
       {
-      die "invalid timespec at *next* [$_]\n";
+      unshift @$ta, $_;
+      return $tt;
+      # die "invalid timespec during *AT* [$_]\n";
       }  
     }
   
