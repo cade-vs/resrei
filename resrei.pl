@@ -306,20 +306,22 @@ sub cmd_new
   db_save( $data );
   my $id = $data->{ ':ID' };
     
-  pc( "saved. id = ^Wr^ $id ^^\n" );
+  pc( "saved. id = ^Yb^ $id ^^\n" );
 }
 
 sub cmd_list
 {
   my $args = shift;
   
+  my $gg;
   my $list = db_list();
   for my $id ( sort { $a <=> $b } @$list )
     {
     my $data = db_load( $id );
     my $ttime = scalar( localtime( $data->{ 'TTIME' } ) );
     my $name  = $data->{ 'NAME' };
-    pc( "^Wb^ $id ^^ ^G^$ttime^^ $name");
+    my $ggc = $gg++ % 2 ? 'G' : 'g';
+    pc( "^Yb^ $id ^^ ^$ggc^$ttime^^ $name");
     }
 }
 
@@ -333,7 +335,7 @@ sub cmd_rename
   my $data = db_load( $id );
   my $old  = $data->{ 'NAME' };
 
-  pc( "rename ^Wb^ $id ^^ ^G^from^^ $old");
+  pc( "rename ^Yb^ $id ^^ ^G^from^^ $old");
   pc( "             ^R^to^^ $name");
 
   return unless confirm( "confirm modification?" );
