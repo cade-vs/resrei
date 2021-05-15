@@ -9,55 +9,110 @@
 ##
 ##############################################################################
 use strict;
+use POSIX;
 use Data::Dumper;
+use Time::HiRes;
 use Term::ReadLine::Tiny;
+use Data::Tools;
 use Data::Tools::Time;
 
+my $DEBUG;
 my $HELP = <<END_OF_HELP;
 
-COMMANDS:
+usage: $0 <options> <command> <timespec> -- message
 
-  NEW <TIMESPEC>       -- create new event
-  MOVE <ID> <TIMESPEC> -- move event with id to new time
+options:
+
+  -h       -- print help
+  -a dir   -- set data dir to hold resrei database
+  -d       -- increase debug level
+
+commands:
+
+  NEW <timespec>       -- create new event
+  MOVE <ID> <timespec> -- move event with id to new time
   LIST                 -- list upcoming events
   LIST OLD             -- list passed events
 
-TIMESPEC:
+timespec:
 
-  SPECIFY DAY IN THE FUTURE:
+  specify day in the future:
   
     in 2days 8hrs 11min 23sec
     in 2h
     in 1week
     in 2mo
 
-  SPECIFY EXACT DATE:
+  specify exact date (and time):
 
-    on jun 12th at 11
-    on 2021 march 1st
+    on jun 12th at 4:30 pm
+    on 2021 march 1st at noon
 
-  SPECIFY TIME:
+  specify exact time:
   
     at 11
     at 2:30 pm
 
-  SPECIFY DAY & TIME IN THE FUTURE:
+  specify day and time in the future:
   
     next tue at 12:00
     next apr 1st
 
-  SPECIFY REPEAT PERIOD:
+  specify repeat period:
 
     repeat every year|month|day  at 11:06
     repeat every 6hrs
     repeat yearly
     repeat daily
 
-EXAMPLES:
+more examples:
 
     new on next sat at 11:30 repeat weekly
 
 END_OF_HELP
+
+my %__PC_COLORS =
+                   (
+                      # foregrounds 
+                      'fk' => '0;30', #blacK
+                      'fr' => '0;31', 	#Red
+                      'fg' => '0;32', 	#Green
+                      'fy' => '0;33', 	#Yellow
+                      'fb' => '0;34', 	#Blue
+                      'fp' => '0;35', 	#Purple
+                      'fc' => '0;36', 	#Cyan
+                      'fw' => '0;37', 	#White
+
+                      # high foregrounds 
+                      'fK' => '1;30', #blacK
+                      'fR' => '1;31', 	#Red
+                      'fG' => '1;32', 	#Green
+                      'fY' => '1;33', 	#Yellow
+                      'fB' => '1;34', 	#Blue
+                      'fP' => '1;35', 	#Purple
+                      'fC' => '1;36', 	#Cyan
+                      'fW' => '1;37', 	#White
+
+                      # backgrounds 
+                      'bk' => '40', 	#blacK
+                      'br' => '41', 	#Red
+                      'bg' => '42', 	#Green
+                      'by' => '43', 	#Yellow
+                      'bb' => '44', 	#Blue
+                      'bp' => '45', 	#Purple
+                      'bc' => '46', 	#Cyan
+                      'bw' => '47', 	#White
+
+                      # hight backgrounds 
+                      'bK' => '90', 	#blacK
+                      'bR' => '91', 	#Red
+                      'bG' => '92', 	#Green
+                      'bY' => '93', 	#Yellow
+                      'bB' => '94', 	#Blue
+                      'bP' => '95', 	#Purple
+                      'bC' => '96', 	#Cyan
+                      'bW' => '97', 	#White
+                   );
 
 my %WEEK_DAYS_SHORT = (
                 
@@ -121,7 +176,45 @@ my %MONTHS_LONG = (
 my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
                 
 my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months am pm ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
-                
+
+##############################################################################
+
+my $DATA_DIR = $ENV{ 'HOME' } . "/.resrei";
+
+our @args;
+while( @ARGV )
+  {
+  $_ = shift;
+  if( /^--+$/io )
+    {
+    push @args, @ARGV;
+    last;
+    }
+  if( /-a/ )
+    {
+    $DATA_DIR = shift;
+    next;
+    }
+  if( /^-d/ )
+    {
+    $DEBUG++;
+    next;
+    }
+  if( /^(--?h(elp)?|help)$/io )
+    {
+    print $HELP;
+    exit;
+    }
+  push @args, $_;
+  }
+
+dir_path_ensure( $DATA_DIR ) or die "fatal: cannot access data dir [$DATA_DIR]\n";
+
+##############################################################################
+
+my $nows = scalar localtime time;
+pc( "welcome to ^R^RES^C^REI^^ current time is ^Y^$nows\n" );
+
 my $rl = Term::ReadLine::Tiny->new( "" );
 $rl->autocomplete( \&autocomplete );
         
@@ -144,7 +237,10 @@ sub exec_cmd
   my $cmd  = shift;
   my $args = shift;
 
-  return cmd_new( $args ) if $cmd =~ /^(new)/i;
+  return cmd_new( $args )    if $cmd =~ /^n(ew)?/i;
+  return cmd_list( $args )   if $cmd =~ /^l(ist)?/i;
+  return cmd_rename( $args ) if $cmd =~ /^(re)?name?/i;
+  return cmd_view( $1 )      if $cmd =~ /^(\d+)/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -160,20 +256,217 @@ sub cmd_new
   my $args = shift;
 
   my ( $time, $repeat ) = parse_time( @$args );
-  print scalar localtime( time() ) . "\n";
-  print scalar localtime( $time  ) . "\n";
+  my $nows = scalar localtime( time() );
+  my $tens = scalar localtime( $time  );
+  my $diff = unix_time_diff_in_words_relative( time() - $time );
   print Dumper( $repeat ) . "\n";
+  
+  pc( "now    is ^Y^$nows" );
+  pc( "target is ^G^$tens^^  $diff" );
+  
+  if( $repeat )
+    {
+    my $ss = $repeat->{ 'SECONDS' };
+    my $mo = $repeat->{ 'MONTHS'  };
+    my $yr = $repeat->{ 'YEARS'   };
+    my $d = int(   $ss / ( 24*60*60 ) );
+    my $h = int( ( $ss % ( 24*60*60 ) ) / ( 60*60 ) );
+    my $m = int( ( $ss % ( 60*60    ) ) /   60      );
+    my $s = int(   $ss %   60         );
+    my $repeat_str;
+    
+    my @repeat;
+    push @repeat, "$yr years"  if $yr > 0;
+    push @repeat, "$yr months" if $mo > 0;
+    push @repeat, "$d days"    if $d > 0;
+    push @repeat, "$h hours"   if $h > 0;
+    push @repeat, "$m minutes" if $m > 0;
+    push @repeat, "$s seconds" if $s > 0;
 
-  my $name = $rl->readline( "new event name: " );
+    my $repeat_str = join ', ', @repeat;
+    pc( "will repeat every ^C^$repeat_str" );
+    }
 
-  my $id = int(rand(111));
+  my $name = getline( "new event name: " );
 
-  print "new event $id with name: $name\n";
-  my $commit = $rl->readline( "save this event? [Y]es/No? " );
+  print "new event name: $name\n";
+
+  if( ! confirm( "save this event?" ) )
+    {
+    print "cancelled.\n";
+    return;
+    }
+    
+  my $data = db_create_new();
+  
+  $data->{ 'NAME'    } = $name;  
+  $data->{ 'TTIME'   } = $time;  
+  $data->{ 'TREPEAT' } = $repeat;  
+
+  db_save( $data );
+  my $id = $data->{ ':ID' };
+    
+  pc( "saved. id = ^Wr^ $id ^^\n" );
+}
+
+sub cmd_list
+{
+  my $args = shift;
+  
+  my $list = db_list();
+  for my $id ( sort { $a <=> $b } @$list )
+    {
+    my $data = db_load( $id );
+    my $ttime = scalar( localtime( $data->{ 'TTIME' } ) );
+    my $name  = $data->{ 'NAME' };
+    pc( "^Wb^ $id ^^ ^G^$ttime^^ $name");
+    }
+}
+
+sub cmd_rename
+{
+  my $args = shift;
+
+  my $id = shift @$args;
+  my $name = join ' ', @$args;
+
+  my $data = db_load( $id );
+  my $old  = $data->{ 'NAME' };
+
+  pc( "rename ^Wb^ $id ^^ ^G^from^^ $old");
+  pc( "             ^R^to^^ $name");
+
+  return unless confirm( "confirm modification?" );
+
+  $data->{ 'NAME' } = $name;
+  db_save( $data );
+  pc( "saved." );
+}
+
+sub cmd_view
+{
+  my $id = shift;
+  
+  my $data = db_load( $id );
+  
+  if( ! $data )
+    {
+    pc( " ^Wr^error: cannot load event id $id " );
+    }
+  
+  print Dumper( $data );
 }
 
 ##############################################################################
- 
+
+sub getline
+{
+  my $prompt = shift;
+  my $input = $rl->readline( "$prompt " );
+  $input =~ s/^//g; # remove colors :))
+  return $input;
+}
+
+sub confirm
+{
+  my $prompt = shift;
+
+  my $commit = getline( "$prompt [Y]es/No? " );
+  return $commit =~ /^(Y(ES)?)?$/i ? 1 : 0;
+}
+
+# print color, escapes are: 
+# # fg bg? #
+# ## -- reset
+sub pc
+{
+  my $msg = shift;
+  
+  $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
+  print $msg, "\e[0m", "\n";
+}
+
+
+sub __pc
+{
+  my $fg = shift;
+  my $bg = shift;
+
+  $fg = $__PC_COLORS{ "f$fg" };
+  $bg = $__PC_COLORS{ "b$bg" };
+  
+  $fg = '0' if ! $fg;
+  $bg = ';' . $bg if $bg;
+  
+  return "\e[${fg}${bg}m";
+} 
+
+### DB #######################################################################
+
+sub __make_id_fn
+{
+  my $id = shift;
+  return "$DATA_DIR/$id.rrdata";
+}
+
+sub db_create_new
+{
+  my %data;
+
+  my $id;
+  my $fn;
+  
+  while(4)
+    {
+    $id = $id + 1;
+    $fn = __make_id_fn( $id );
+    next if -e $fn;
+    last if sysopen my $F, $fn, O_CREAT | O_EXCL, 0600;
+    $fn = undef;
+    }  
+
+  die "cannot create new data file in [$DATA_DIR]\n" unless $fn;
+
+  $data{ ':ID' } = $id;
+  
+  return \%data;
+}
+
+sub db_list
+{
+  my $order = shift; # [A]lpha, [N]um, [M]time, [R]eversed
+  my @list;
+  
+  @list = sort map { file_name( $_ ) } glob "$DATA_DIR/*.rrdata";
+  
+  return \@list;
+}
+
+sub db_load
+{
+  my $id = shift;
+
+  my $fn = __make_id_fn( $id );
+  return hash_load( $fn ) or die " cannot load data from [$fn]\n";
+}
+
+sub db_save
+{
+  my $data = shift;
+
+  my $id = $data->{ ':ID' };
+  my $fn = __make_id_fn( $id );
+  return hash_save( $fn, $data ) or die " cannot load data from [$fn]\n";
+}
+
+sub db_get_history
+{
+  my $id   = shift;
+  die "to be implemented";
+}
+
+### PARSE TIME ###############################################################
+
 sub autocomplete
 {
   my $rl   = shift;
@@ -198,9 +491,7 @@ sub autocomplete
   #print Dumper( \@_ );
   return $text;
 }
-
-### PARSE TIME ###############################################################
-
+                
 sub parse_time
 {
   my $ta = [ @_ ];
@@ -339,7 +630,7 @@ sub parse_time_on
       $year = $1;
       next;
       }
-    elsif( /^(\d+)(st|nd)?$/ )
+    elsif( /^(\d+)(st|nd|rd|th)?$/ )
       {
       $day = $1;
       next;
