@@ -26,6 +26,8 @@ options:
   -h       -- print help
   -a dir   -- set data dir to hold resrei database
   -d       -- increase debug level
+  -y       -- assume YES to all questions (disables -n)
+  -n       -- assume NO  to all questions (disables -y)
 
 commands:
 
@@ -177,22 +179,46 @@ my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
                 
 my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months am pm ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
 
+my %LIST_TYPES = (
+                 'all'     => 'all',
+                 'del'     => 'del',
+                 'deleted' => 'del',
+                 'over'    => 'over',
+                 'overdue' => 'over',
+                 );
+
 ##############################################################################
 
 my $DATA_DIR = $ENV{ 'HOME' } . "/.resrei";
+my $READLINE;
+my $opt_always_yes;
+my $opt_always_no;
 
 our @args;
+our @args2;
 while( @ARGV )
   {
   $_ = shift;
   if( /^--+$/io )
     {
-    push @args, @ARGV;
+    push @args2, @ARGV;
     last;
     }
   if( /-a/ )
     {
     $DATA_DIR = shift;
+    next;
+    }
+  if( /-y/ )
+    {
+    $opt_always_yes = 1;
+    $opt_always_no  = 0;
+    next;
+    }
+  if( /-n/ )
+    {
+    $opt_always_yes = 0;
+    $opt_always_no  = 1;
     next;
     }
   if( /^-d/ )
@@ -212,35 +238,47 @@ dir_path_ensure( $DATA_DIR ) or die "fatal: cannot access data dir [$DATA_DIR]\n
 
 ##############################################################################
 
-my $nows = scalar localtime time;
-pc( "welcome to ^R^RES^C^REI^^ current time is ^Y^$nows\n" );
-
-my $rl = Term::ReadLine::Tiny->new( "" );
-$rl->autocomplete( \&autocomplete );
-        
-while(4)
+if( @args )
   {
-  my $line = $rl->readline( "resrei: " );
-  my @line = split /\s+/, $line;
-  my $cmd = shift @line;
-  next unless $cmd;
-  
-  last if $cmd =~ /^(q|x|quit|exit|zz)/i;
-
-  exec_cmd( $cmd, \@line );
+  exec_cmd( shift( @args ), \@args, \@args2 );
   }
+else
+  {
+  go_interactive();
+  }  
+
+
+sub go_interactive
+{
+  my $nows = scalar localtime time;
+  pc( "welcome to ^R^RES^C^REI^^ current time is ^Y^$nows\n" );
+  
+  while(4)
+    {
+    my $line = getline( "resrei: " );
+    my @line = split /\s+/, $line;
+    my $cmd = shift @line;
+    next unless $cmd;
+    
+    last if $cmd =~ /^(q|x|quit|exit|zz)/i;
+
+    exec_cmd( $cmd, \@line );
+    }
+}
 
 ### COMMANDS #################################################################
 
 sub exec_cmd
 {
-  my $cmd  = shift;
-  my $args = shift;
+  my $cmd   = shift;
+  my $args  = shift;
+  my $args2 = shift;
 
-  return cmd_new( $args )    if $cmd =~ /^n(ew)?/i;
-  return cmd_list( $args )   if $cmd =~ /^l(ist)?/i;
-  return cmd_rename( $args ) if $cmd =~ /^(re)?name?/i;
-  return cmd_view( $1 )      if $cmd =~ /^(\d+)/i;
+  return cmd_new( $args, $args2 )    if $cmd =~ /^n(ew)?/i;
+  return cmd_del( $args )            if $cmd =~ /^del(ete)?/i;
+  return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
+  return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name?/i;
+  return cmd_view( $1 )              if $cmd =~ /^(\d+)/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -253,13 +291,13 @@ sub cmd_help
 
 sub cmd_new
 {
-  my $args = shift;
+  my $args  = shift;
+  my $args2 = shift;
 
   my ( $time, $repeat ) = parse_time( @$args );
   my $nows = scalar localtime( time() );
   my $tens = scalar localtime( $time  );
   my $diff = unix_time_diff_in_words_relative( time() - $time );
-  print Dumper( $repeat ) . "\n";
   
   pc( "now    is ^Y^$nows" );
   pc( "target is ^G^$tens^^  $diff" );
@@ -287,7 +325,7 @@ sub cmd_new
     pc( "will repeat every ^C^$repeat_str" );
     }
 
-  my $name = getline( "new event name: " );
+  my $name = join( ' ', @$args2 ) || getline( "new event name: " );
 
   print "new event name: $name\n";
 
@@ -306,23 +344,81 @@ sub cmd_new
   db_save( $data );
   my $id = $data->{ ':ID' };
     
-  pc( "saved. id = ^Yb^ $id ^^\n" );
+  pc( "saved. id = ^R^ $id ^^\n" );
+}
+
+sub cmd_del
+{
+  my $args = shift;
+
+  my $count = list_events( @$args  );
+  
+  return pc( "no events to delete" ) unless $count;
+  return unless confirm( "delete listed events?" );
+
+  for my $id ( @$args )
+    {
+    my $data = db_load( $id ) or next;
+    next if $data->{ ':DELETED' };  
+    $data->{ ':DELETED' } = time();
+    db_save( $data );
+    }
+  
+  pc( "^Wr^ DELETED! ^^ (use 'list trash' to view deleted)" );
 }
 
 sub cmd_list
 {
   my $args = shift;
   
-  my $gg;
+  my $type = $LIST_TYPES{ shift @$args } || 'all';
+
+  return pc( "unknown list type [$type] expected one of: all, deleted, overdue" ) unless $type;
+
   my $list = db_list();
-  for my $id ( sort { $a <=> $b } @$list )
+  list_events( $type, sort { $a <=> $b } @$list );
+}
+
+sub list_events
+{
+  my $type = shift;
+  
+  my $count;
+  for my $id ( @_ )
     {
     my $data = db_load( $id );
-    my $ttime = scalar( localtime( $data->{ 'TTIME' } ) );
+    if( ! $data )
+      {
+      pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
+      next;
+      }
+    
+    my $ttime = $data->{ 'TTIME' };
+    my $over  = " ^Wr^ ! OVERDUE ! ^r^ " . unix_time_diff_in_words_relative( time() - $ttime ) . "^^ " if $ttime < time();
+    
+    if( $type eq 'over' )
+      {
+      next if $data->{ ':DELETED' };
+      next if $ttime > time(); 
+      }
+    elsif( $type eq 'del' )
+      {
+      next unless $data->{ ':DELETED' };  
+      }
+    else
+      {
+      # all
+      next if $data->{ ':DELETED' };  
+      }  
+    
+    my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
-    my $ggc = $gg++ % 2 ? 'G' : 'g';
-    pc( "^Yb^ $id ^^ ^$ggc^$ttime^^ $name");
+    my $ggc = $count % 2 ? 'Y' : 'y';
+    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over $name");
+    $count++;
     }
+  
+  return $count;  
 }
 
 sub cmd_rename
@@ -332,13 +428,16 @@ sub cmd_rename
   my $id = shift @$args;
   my $name = join ' ', @$args;
 
+  $name = getline( 'enter new name:' ) unless $name;
+  return pc( 'cancelled.' ) unless $name;
+
   my $data = db_load( $id );
-  my $old  = $data->{ 'NAME' };
+  my $old  = $data->{ 'NAME' } || '<unnamed>';
 
-  pc( "rename ^Yb^ $id ^^ ^G^from^^ $old");
-  pc( "             ^R^to^^ $name");
+  pc( "rename ^R^ $id ^^ ^c^from^^ $old");
+  pc( "             ^C^to^^ $name");
 
-  return unless confirm( "confirm modification?" );
+  return unless confirm( "confirm?" );
 
   $data->{ 'NAME' } = $name;
   db_save( $data );
@@ -364,7 +463,14 @@ sub cmd_view
 sub getline
 {
   my $prompt = shift;
-  my $input = $rl->readline( "$prompt " );
+
+  if( ! $READLINE )
+    {
+    $READLINE = Term::ReadLine::Tiny->new( "" );
+    $READLINE->autocomplete( \&autocomplete );
+    }
+
+  my $input = $READLINE->readline( "$prompt " );
   $input =~ s/^//g; # remove colors :))
   return $input;
 }
@@ -373,8 +479,13 @@ sub confirm
 {
   my $prompt = shift;
 
-  my $commit = getline( "$prompt [Y]es/No? " );
-  return $commit =~ /^(Y(ES)?)?$/i ? 1 : 0;
+  return 0 if $opt_always_no;
+  return 1 if $opt_always_yes;
+
+  print "\n";
+  my $commit = getline( "$prompt Yes/No? " );
+  print "\n";
+  return $commit =~ /^Y(ES)?$/i ? 1 : 0;
 }
 
 # print color, escapes are: 
@@ -538,6 +649,7 @@ sub parse_time
       my $at = parse_time_at( $ta );
       my ( $tsd ) = utime_split_to_utt( $ts );
       $ts = utime_join_utt( $tsd, $at );
+      $ts += 24*60*60 if $ts < time();
       next;
       }
     else
@@ -824,7 +936,6 @@ sub parse_time_next
   return $tt;
 }
 
-# TODO: am/pm?
 sub parse_time_at
 {
   my $ta = shift;
