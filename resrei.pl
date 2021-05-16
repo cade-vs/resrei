@@ -394,7 +394,7 @@ sub list_events
       }
     
     my $ttime = $data->{ 'TTIME' };
-    my $over  = " ^Wr^ ! OVERDUE ! ^r^ " . unix_time_diff_in_words_relative( time() - $ttime ) . "^^ " if $ttime < time();
+    my $over  = " ^Wr^ OVERDUE " . overdue_time_diff( time() - $ttime ) . " ^^ " if $ttime < time();
     
     if( $type eq 'over' )
       {
@@ -414,7 +414,7 @@ sub list_events
     my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $ggc = $count % 2 ? 'Y' : 'y';
-    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over $name");
+    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over\n\t$name");
     $count++;
     }
   
@@ -971,6 +971,33 @@ sub parse_time_at
     }
   
   return $tt;
+}
+
+##############################################################################
+
+sub overdue_time_diff
+{
+  my $diff = abs( shift );
+  
+  my $d = int( $diff / ( 24*60*60 ) );
+  
+  return __om( $d, "day", "days" ) if $d > 0;
+
+  my $h = int( $diff / ( 60*60 ) );
+
+  return __om( $h, "hour", "hours" ) if $h > 0;
+
+  my $m = int( $diff / 60 );
+
+  return __om( $m, "minute", "minutes" ) if $m > 0;
+
+  return __om( $diff, "second", "seconds" );
+}
+
+sub __om
+{
+  my $n = shift;
+  return "$n " . ( $n == 1 ? $_[0] : $_[1] );
 }
 
 ##############################################################################
