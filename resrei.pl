@@ -277,7 +277,8 @@ sub exec_cmd
   return cmd_new( $args, $args2 )    if $cmd =~ /^n(ew)?/i;
   return cmd_del( $args )            if $cmd =~ /^del(ete)?/i;
   return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
-  return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name?/i;
+  return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name/i;
+  return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
   return cmd_view( $1 )              if $cmd =~ /^(\d+)/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
@@ -394,7 +395,7 @@ sub list_events
       }
     
     my $ttime = $data->{ 'TTIME' };
-    my $over  = " ^Wr^ OVERDUE " . overdue_time_diff( time() - $ttime ) . " ^^ " if $ttime < time();
+    my $over  = "^Wr^ OVERDUE " . overdue_time_diff( time() - $ttime ) . " ^^" if $ttime < time();
     
     if( $type eq 'over' )
       {
@@ -414,7 +415,7 @@ sub list_events
     my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $ggc = $count % 2 ? 'Y' : 'y';
-    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over\n\t$name");
+    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over $name");
     $count++;
     }
   
@@ -442,6 +443,18 @@ sub cmd_rename
   $data->{ 'NAME' } = $name;
   db_save( $data );
   pc( "saved." );
+}
+
+sub cmd_repeat
+{
+  my $args = shift;
+
+  my $id = shift @$args;
+  
+  print Dumper( $args );
+  my $tr = parse_time_repeat( $args );
+  print Dumper( $tr );
+  
 }
 
 sub cmd_view
@@ -696,21 +709,24 @@ sub parse_time_repeat
       $tr->{ 'YEARS'   } += 1 if $type eq 'Y';  # years
       next;
       }
-    elsif( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
+    elsif( /^(\d*)(s(ec(onds?)?)|mi(n(utes?)?)|h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
+      $type = uc substr( $2, 1, 1 ) if $type eq 'M';
       my $add = $1 || $a;
 
       $add = 1 unless $add > 0;
 
       my $tt;
+      $tt +=                    $add if $type eq 'S'; # seconds
+      $tt +=               $add * 60 if $type eq 'I'; # minutes
       $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
       $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
       $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
       
       $tr->{ 'SECONDS' } += $tt;
 
-      $tr->{ 'MONTHS'  } += $add if $type eq 'M'; # months
+      $tr->{ 'MONTHS'  } += $add if $type eq 'O'; # months
       $tr->{ 'YEARS'   } += $add if $type eq 'Y';  # years
       next;
       }
