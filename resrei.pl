@@ -259,7 +259,7 @@ sub go_interactive
   
   while(4)
     {
-    my $line = getline( "resrei: " );
+    my $line = getline( "^R^res^C^rei^^: " );
     my @line = split /\s+/, $line;
     my $cmd = shift @line;
     next unless $cmd;
@@ -283,7 +283,7 @@ sub exec_cmd
   return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
   return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name/i;
   return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
-  return cmd_view( $1 )              if $cmd =~ /^(\d+)/i;
+  return cmd_view( [ $1 ] )          if $cmd =~ /^(\d+)/i;
   return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
   return cmd_check( 1, $args )       if $cmd =~ /^c(heck)?/i;
   return cmd_check( 0, $args )       if $cmd =~ /^u(n(c(heck)?)?)?/i;
@@ -386,7 +386,7 @@ sub cmd_check
 
   my $un = 'UN' if $uncheck;
   return pc( "no events to ${un}CHECK" ) unless $count;
-  return unless confirm( "mark listed events ${un}CHECKED (repeat events will start new period)?" );
+  return unless confirm( "${un}CHECK listed events ^y^(repeat events will start new period)^^?" );
 
   for my $id ( @$args )
     {
@@ -418,9 +418,6 @@ sub cmd_check
       $data->{ 'TTIME'     } = $tt;
       $data->{ 'TTIME_STR' } = scalar localtime $tt;
       
-      my $tts = scalar localtime $tt;
-      my $ttdiff = short_time_diff( $tt - time() );
-      print "event $id new target time moved to $tts, in $ttdiff\n";
       }
     else
       {
@@ -429,7 +426,8 @@ sub cmd_check
     $data->{ 'CHECKED_TIMES' } ||= [];
     push @{ $data->{ 'CHECKED_TIMES' } }, time();
 
-    #db_save( $data );
+    db_save( $data );
+    list_events( 'all', $id );
     }
   
   pc( "^Wy^ CHECKED! ^^" );
@@ -462,7 +460,6 @@ sub list_events
       }
     
     my $ttime = $data->{ 'TTIME' };
-    my $tdiff = ( $ttime < time() ? "^Wr^ OVERDUE " : "^G^ IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     
     if( $type eq 'over' )
       {
@@ -479,10 +476,12 @@ sub list_events
       next if $data->{ ':DELETED' };  
       }  
     
+    my $tdiff = ( $ttime < time() ? "^Wr^ OVERDUE " : "^G^ IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
     my $ggc = $count % 2 ? 'Y' : 'y';
+    $tdiff = "^Wg^   CHECKED  ^^" if $data->{ 'CHECKED' };
     pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff\t$name");
     $count++;
     }
@@ -565,7 +564,7 @@ sub getline
     $READLINE->autocomplete( \&autocomplete );
     }
 
-  my $input = $READLINE->readline( "$prompt " );
+  my $input = $READLINE->readline( ec( $prompt ) );
   $input =~ s/^//g; # remove colors :))
   return $input;
 }
@@ -590,10 +589,16 @@ sub pc
 {
   my $msg = shift;
   
-  $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
-  print $msg, "\e[0m", "\n";
+  print ec( $msg ), "\n";
 }
 
+sub ec
+{
+  my $msg = shift;
+  
+  $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
+  return $msg . "\e[0m";
+}
 
 sub __pc
 {
