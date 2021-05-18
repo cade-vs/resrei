@@ -15,6 +15,7 @@ use Time::HiRes;
 use Term::ReadLine::Tiny;
 use Data::Tools;
 use Data::Tools::Time;
+use Data::Stacker;
 
 my $DEBUG;
 my $HELP = <<END_OF_HELP;
@@ -181,10 +182,13 @@ my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month 
 
 my %LIST_TYPES = (
                  'all'     => 'all',
+                 'a'       => 'all',
                  'del'     => 'del',
                  'deleted' => 'del',
+                 'd'       => 'del',
                  'over'    => 'over',
                  'overdue' => 'over',
+                 'o'       => 'over',
                  );
 
 ##############################################################################
@@ -280,6 +284,9 @@ sub exec_cmd
   return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name/i;
   return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
   return cmd_view( $1 )              if $cmd =~ /^(\d+)/i;
+  return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
+  return cmd_check( 1, $args )       if $cmd =~ /^c(heck)?/i;
+  return cmd_check( 0, $args )       if $cmd =~ /^u(n(c(heck)?)?)?/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -292,43 +299,41 @@ sub cmd_help
 
 sub cmd_new
 {
-  my $args  = shift;
-  my $args2 = shift;
+  my $args  = shift || [];
+  my $args2 = shift || [];
+
+  my $create_args = join( ' ', @args, '--', @args2 );
 
   my ( $time, $repeat ) = parse_time( @$args );
   my $nows = scalar localtime( time() );
   my $tens = scalar localtime( $time  );
   my $diff = unix_time_diff_in_words_relative( time() - $time );
   
-  pc( "now    is ^Y^$nows" );
-  pc( "target is ^G^$tens^^  $diff" );
+  pc( "current time: ^Y^$nows" );
+  pc( "target time:  ^G^$tens^^  $diff" );
   
   if( $repeat )
     {
-    my $ss = $repeat->{ 'SECONDS' };
-    my $mo = $repeat->{ 'MONTHS'  };
-    my $yr = $repeat->{ 'YEARS'   };
-    my $d = int(   $ss / ( 24*60*60 ) );
-    my $h = int( ( $ss % ( 24*60*60 ) ) / ( 60*60 ) );
-    my $m = int( ( $ss % ( 60*60    ) ) /   60      );
-    my $s = int(   $ss %   60         );
-    my $repeat_str;
-    
-    my @repeat;
-    push @repeat, "$yr years"  if $yr > 0;
-    push @repeat, "$yr months" if $mo > 0;
-    push @repeat, "$d days"    if $d > 0;
-    push @repeat, "$h hours"   if $h > 0;
-    push @repeat, "$m minutes" if $m > 0;
-    push @repeat, "$s seconds" if $s > 0;
-
-    my $repeat_str = join ', ', @repeat;
+    my $repeat_str = repeat_time_str( $repeat );
     pc( "will repeat every ^C^$repeat_str" );
     }
 
-  my $name = join( ' ', @$args2 ) || getline( "new event name: " );
+  my $name;
+  
+  if( $args2 and @$args2 )
+    {
+    $name = join( ' ', @$args2 )
+    }
+  
+  if( ! $name )
+    {
+    $name = getline( "new event name: " );
+    }
+  else
+    {
+    print "event name:   $name\n";
+    }  
 
-  print "new event name: $name\n";
 
   if( ! confirm( "save this event?" ) )
     {
@@ -338,9 +343,13 @@ sub cmd_new
     
   my $data = db_create_new();
   
-  $data->{ 'NAME'    } = $name;  
-  $data->{ 'TTIME'   } = $time;  
-  $data->{ 'TREPEAT' } = $repeat;  
+  $data->{ 'NAME'        } = $name;  
+  $data->{ 'TTIME'       } = $time;  
+  $data->{ 'TTIME_STR'   } = scalar localtime $time;
+  $data->{ 'TREPEAT'     } = $repeat;  
+  $data->{ 'CTIME'       } = time();  
+  $data->{ 'CTIME_STR'   } = scalar localtime( time() );   
+  $data->{ 'CREATE_ARGS' } = $create_args;
 
   db_save( $data );
   my $id = $data->{ ':ID' };
@@ -366,6 +375,64 @@ sub cmd_del
     }
   
   pc( "^Wr^ DELETED! ^^ (use 'list trash' to view deleted)" );
+}
+
+sub cmd_check
+{
+  my $uncheck = ! shift;
+  my $args    =   shift;
+
+  my $count = list_events( 'all', @$args  );
+
+  my $un = 'UN' if $uncheck;
+  return pc( "no events to ${un}CHECK" ) unless $count;
+  return unless confirm( "mark listed events ${un}CHECKED (repeat events will start new period)?" );
+
+  for my $id ( @$args )
+    {
+    my $data = db_load( $id ) or next;
+
+    if( $uncheck )
+      {
+      delete $data->{ 'CHECKED' };
+      $data->{ 'UNCHECKED_TIMES' } ||= [];
+      push @{ $data->{ 'UNCHECKED_TIMES' } }, time();
+      next;
+      }
+
+    my $repeat = $data->{ 'TREPEAT' };
+    if( $repeat )
+      {
+      my $ss = $repeat->{ 'SECONDS' } || 0;
+      my $mo = $repeat->{ 'MONTHS'  } || 0;
+      my $yr = $repeat->{ 'YEARS'   } || 0;
+
+      my $tt = $data->{ 'TTIME' };
+      
+      while(4)
+        {
+        $tt = utime_add_ymdhms( $tt, $yr, $mo, 0, 0, 0, $ss );
+        last if $tt > time(); # repeat until next target time is in the future
+        }
+
+      $data->{ 'TTIME'     } = $tt;
+      $data->{ 'TTIME_STR' } = scalar localtime $tt;
+      
+      my $tts = scalar localtime $tt;
+      my $ttdiff = short_time_diff( $tt - time() );
+      print "event $id new target time moved to $tts, in $ttdiff\n";
+      }
+    else
+      {
+      $data->{ 'CHECKED' } = time();
+      }  
+    $data->{ 'CHECKED_TIMES' } ||= [];
+    push @{ $data->{ 'CHECKED_TIMES' } }, time();
+
+    #db_save( $data );
+    }
+  
+  pc( "^Wy^ CHECKED! ^^" );
 }
 
 sub cmd_list
@@ -395,7 +462,7 @@ sub list_events
       }
     
     my $ttime = $data->{ 'TTIME' };
-    my $over  = "^Wr^ OVERDUE " . overdue_time_diff( time() - $ttime ) . " ^^" if $ttime < time();
+    my $tdiff = ( $ttime < time() ? "^Wr^ OVERDUE " : "^G^ IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     
     if( $type eq 'over' )
       {
@@ -414,8 +481,9 @@ sub list_events
     
     my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
+    my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
     my $ggc = $count % 2 ? 'Y' : 'y';
-    pc( "^R^ $id ^^ ^$ggc^$ttimes^^ $over $name");
+    pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff\t$name");
     $count++;
     }
   
@@ -450,25 +518,39 @@ sub cmd_repeat
   my $args = shift;
 
   my $id = shift @$args;
+  cmd_view( $id );
+
+  my $repeat = parse_time_repeat( $args );
+  if( $repeat )
+    {
+    my $repeat_str = repeat_time_str( $repeat );
+    pc( "will repeat every ^C^$repeat_str" );
+    }
   
-  print Dumper( $args );
-  my $tr = parse_time_repeat( $args );
-  print Dumper( $tr );
+  return unless confirm( "confirm new repeat time?" );
   
+  my $data = db_load( $id );
+  $data->{ 'TREPEAT' } = $repeat;  
+  db_save( $data );
 }
 
 sub cmd_view
 {
-  my $id = shift;
-  
-  my $data = db_load( $id );
-  
-  if( ! $data )
+  my $args = shift;
+
+  for my $id ( @$args )
     {
-    pc( " ^Wr^error: cannot load event id $id " );
+    my $data = db_load( $id );
+    
+    if( ! $data )
+      {
+      pc( " ^Wr^error: cannot load event id $id " );
+      }
+    
+    print Dumper( $data );
+    print "-----------------------------------------\n";
     }
   
-  print Dumper( $data );
 }
 
 ##############################################################################
@@ -573,7 +655,7 @@ sub db_load
   my $id = shift;
 
   my $fn = __make_id_fn( $id );
-  return hash_load( $fn ) or die " cannot load data from [$fn]\n";
+  return unstack_data( file_load( $fn ) ) or die " cannot load data from [$fn]\n";
 }
 
 sub db_save
@@ -582,7 +664,7 @@ sub db_save
 
   my $id = $data->{ ':ID' };
   my $fn = __make_id_fn( $id );
-  return hash_save( $fn, $data ) or die " cannot load data from [$fn]\n";
+  return file_save( $fn, stack_data( $data ) ) or die " cannot load data from [$fn]\n";
 }
 
 sub db_get_history
@@ -692,7 +774,7 @@ sub parse_time_repeat
       $_ = lc shift @$ta;
       }
 
-    if( /^every/ )
+    if( /^(every|and)/ )
       {
       next;
       }
@@ -859,6 +941,11 @@ sub parse_time_in
     $_ = lc shift @$ta;
     $a = 0;
     
+    if( /^(and)/ )
+      {
+      next;
+      }
+      
     if( /^(\d+|a)$/ )
       {
       $a = $1 eq 'a' ? 1 : $1;
@@ -991,7 +1078,31 @@ sub parse_time_at
 
 ##############################################################################
 
-sub overdue_time_diff
+sub repeat_time_str
+{
+  my $repeat = shift;
+
+  my $ss = $repeat->{ 'SECONDS' };
+  my $mo = $repeat->{ 'MONTHS'  };
+  my $yr = $repeat->{ 'YEARS'   };
+  my $d = int(   $ss / ( 24*60*60 ) );
+  my $h = int( ( $ss % ( 24*60*60 ) ) / ( 60*60 ) );
+  my $m = int( ( $ss % ( 60*60    ) ) /   60      );
+  my $s = int(   $ss %   60         );
+  my $repeat_str;
+  
+  my @repeat;
+  push @repeat, "$yr years"  if $yr > 0;
+  push @repeat, "$yr months" if $mo > 0;
+  push @repeat, "$d days"    if $d > 0;
+  push @repeat, "$h hours"   if $h > 0;
+  push @repeat, "$m minutes" if $m > 0;
+  push @repeat, "$s seconds" if $s > 0;
+
+  return join ', ', @repeat;
+}
+
+sub short_time_diff
 {
   my $diff = abs( shift );
   
