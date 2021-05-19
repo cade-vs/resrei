@@ -17,6 +17,16 @@ use Data::Tools;
 use Data::Tools::Time;
 use Data::Stacker;
 
+##############################################################################
+=pod
+
+TODO: limit clause for count: new in a week repeat weekly limit 4 times
+TODO: limit clause for time:  new in a week repeat weekly limit until 4th dec
+TODO: first/last: new on last sat of jun 2021
+
+=cut
+##############################################################################
+
 my $DEBUG;
 my $HELP = <<END_OF_HELP;
 
@@ -25,7 +35,9 @@ usage: $0 <options> <command> <timespec> -- message
 options:
 
   -h       -- print help
-  -a dir   -- set data dir to hold resrei database
+  -a dir   -- set data dir to hold resrei database (default is ~/.resrei)
+  -p       -- allows date/time in the past
+  -b       -- black & white mode, remove colors
   -d       -- increase debug level
   -y       -- assume YES to all questions (disables -n)
   -n       -- assume NO  to all questions (disables -y)
@@ -33,11 +45,26 @@ options:
 commands:
 
   NEW <timespec>       -- create new event
-  MOVE <ID> <timespec> -- move event with id to new time
+  VIEW <ID>            -- show details for event <ID>
+  <ID>...              -- (no command) show details for event <ID>... list
+  DEL  <ID>...         -- delete given event <ID>... list
+  MOVE <ID> <timespec> -- move event with <ID> to new time
+  RENAME <ID> <name>   -- sets event <ID> name to <name>
+  REPEAT <ID> <repeat> -- sets new repeat interval for <ID> event
   LIST                 -- list upcoming events
-  LIST OLD             -- list passed events
+  LIST ALL             -- list all events
+  LIST DELETED         -- list deleted events
+  LIST OVERDUE         -- list overdue events only
+  LIST ACTIVE          -- list active (not reached and overdue) events
+  CHECK <ID>...        -- mark <ID>.. events as checked (i.e. seen/done)
+  UNCHECK <ID>...      -- removed checked mark for <ID>... events
 
-timespec:
+  commands have aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
+                          REPEAT=REP, CHECK=C, UNCHECK=U
+       
+  LIST cmd has aliases: ALL=A, DELETED=D, OVERDUE=O, ACTIVE=I
+
+timespec specification examples:
 
   specify day in the future:
   
@@ -70,7 +97,8 @@ timespec:
 
 more examples:
 
-    new on next sat at 11:30 repeat weekly
+    resrei new on next sat at 11:30 repeat weekly
+    resrei new in a week and 1 day at 11pm -- evening test
 
 END_OF_HELP
 
@@ -183,12 +211,14 @@ my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month 
 my %LIST_TYPES = (
                  'all'     => 'all',
                  'a'       => 'all',
-                 'del'     => 'del',
-                 'deleted' => 'del',
-                 'd'       => 'del',
-                 'over'    => 'over',
-                 'overdue' => 'over',
-                 'o'       => 'over',
+                 'del'     => 'deleted',
+                 'deleted' => 'deleted',
+                 'd'       => 'deleted',
+                 'over'    => 'overdue',
+                 'overdue' => 'overdue',
+                 'o'       => 'overdue',
+                 'active'  => 'active',
+                 'i'       => 'active',
                  );
 
 ##############################################################################
@@ -197,6 +227,8 @@ my $DATA_DIR = $ENV{ 'HOME' } . "/.resrei";
 my $READLINE;
 my $opt_always_yes;
 my $opt_always_no;
+my $opt_allow_past;
+my $opt_no_colors;
 
 our @args;
 our @args2;
@@ -223,6 +255,16 @@ while( @ARGV )
     {
     $opt_always_yes = 0;
     $opt_always_no  = 1;
+    next;
+    }
+  if( /-p/ )
+    {
+    $opt_allow_past = 1;
+    next;
+    }
+  if( /-b/ )
+    {
+    $opt_no_colors = 1;
     next;
     }
   if( /^-d/ )
@@ -442,7 +484,10 @@ sub cmd_list
   return pc( "unknown list type [$type] expected one of: all, deleted, overdue" ) unless $type;
 
   my $list = db_list();
-  list_events( $type, sort { $a <=> $b } @$list );
+
+  my $count = list_events( $type, sort { $a <=> $b } @$list );
+  
+  return pc( "no events of type '$type' to list" ) unless $count;
 }
 
 sub list_events
@@ -461,14 +506,18 @@ sub list_events
     
     my $ttime = $data->{ 'TTIME' };
     
-    if( $type eq 'over' )
+    if( $type eq 'overdue' )
       {
       next if $data->{ ':DELETED' };
       next if $ttime > time(); 
       }
-    elsif( $type eq 'del' )
+    elsif( $type eq 'deleted' )
       {
       next unless $data->{ ':DELETED' };  
+      }
+    elsif( $type eq 'active' )
+      {
+      next if $data->{ ':DELETED' } or $data->{ 'CHECKED' };
       }
     else
       {
@@ -481,7 +530,7 @@ sub list_events
     my $name  = $data->{ 'NAME' };
     my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
     my $ggc = $count % 2 ? 'Y' : 'y';
-    $tdiff = "^Wg^   CHECKED  ^^" if $data->{ 'CHECKED' };
+    $tdiff = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
     pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff\t$name");
     $count++;
     }
@@ -605,11 +654,13 @@ sub __pc
   my $fg = shift;
   my $bg = shift;
 
+  return undef if $opt_no_colors;
+
   $fg = $__PC_COLORS{ "f$fg" };
   $bg = $__PC_COLORS{ "b$bg" };
   
-  $fg = '0' if ! $fg;
-  $bg = ';' . $bg if $bg;
+  $fg = '0'       if ! $fg;
+  $bg = ';' . $bg if   $bg;
   
   return "\e[${fg}${bg}m";
 } 
@@ -727,7 +778,7 @@ sub parse_time
       $ts = parse_time_on( $ta, $now );
       my $tss = $ts > 0 ? scalar localtime $ts : 'n/a';
       die "cannot set time in the past [$tss]\n" if $ts > 0 and $ts < $now;
-      die "invalid date/time\n" if $ts < $now;
+      die "invalid date/time, expected timespec in the future, use -p to override\n" if ! $opt_allow_past and $ts < $now;
       next;
       }
     elsif( /^next/ )
