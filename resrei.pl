@@ -327,8 +327,8 @@ sub exec_cmd
   return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
   return cmd_view( [ $1 ] )          if $cmd =~ /^(\d+)/i;
   return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
-  return cmd_check( 1, $args )       if $cmd =~ /^c(heck)?/i;
-  return cmd_check( 0, $args )       if $cmd =~ /^u(n(c(heck)?)?)?/i;
+  return cmd_check( $args )          if $cmd =~ /^c(heck)?/i;
+  return cmd_uncheck( $args )        if $cmd =~ /^u(n(c(heck)?)?)?/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -421,26 +421,16 @@ sub cmd_del
 
 sub cmd_check
 {
-  my $uncheck = ! shift;
   my $args    =   shift;
 
   my $count = list_events( 'all', @$args  );
 
-  my $un = 'UN' if $uncheck;
-  return pc( "no events to ${un}CHECK" ) unless $count;
-  return unless confirm( "${un}CHECK listed events ^y^(repeat events will start new period)^^?" );
+  return pc( "no events to CHECK" ) unless $count;
+  return unless confirm( "CHECK listed events ^y^(repeat events will start new period)^^?" );
 
   for my $id ( @$args )
     {
     my $data = db_load( $id ) or next;
-
-    if( $uncheck )
-      {
-      delete $data->{ 'CHECKED' };
-      $data->{ 'UNCHECKED_TIMES' } ||= [];
-      push @{ $data->{ 'UNCHECKED_TIMES' } }, time();
-      next;
-      }
 
     my $repeat = $data->{ 'TREPEAT' };
     if( $repeat )
@@ -471,8 +461,27 @@ sub cmd_check
     db_save( $data );
     list_events( 'all', $id );
     }
-  
-  pc( "^Wy^ CHECKED! ^^" );
+}
+
+sub cmd_uncheck
+{
+  my $args    =   shift;
+
+  my $count = list_events( 'all', @$args  );
+
+  return pc( "no events to UNCHECK" ) unless $count;
+  return unless confirm( "UNCHECK listed events ^y^(repeat events will start new period)^^?" );
+
+  for my $id ( @$args )
+    {
+    my $data = db_load( $id ) or next;
+
+    delete $data->{ 'CHECKED' };
+    $data->{ 'UNCHECKED_TIMES' } ||= [];
+    push @{ $data->{ 'UNCHECKED_TIMES' } }, time();
+    db_save( $data );
+    list_events( 'all', $id );
+    }
 }
 
 sub cmd_list
@@ -493,9 +502,12 @@ sub cmd_list
 sub list_events
 {
   my $type = shift;
+  my @ev = @_;
+
+  @ev = sort { db_ttime( $a ) <=> db_ttime( $b ) } @ev if $type eq 'active' or $type eq 'overdue';
   
   my $count;
-  for my $id ( @_ )
+  for my $id ( @ev )
     {
     my $data = db_load( $id );
     if( ! $data )
@@ -727,6 +739,16 @@ sub db_get_history
 {
   my $id   = shift;
   die "to be implemented";
+}
+
+sub db_ttime
+{
+  my $id   = shift;
+  
+  my $data = db_load( $id );
+  return 0 unless $data;
+
+  return $data->{ 'TTIME' };
 }
 
 ### PARSE TIME ###############################################################
