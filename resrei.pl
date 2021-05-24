@@ -537,13 +537,13 @@ sub list_events
       next if $data->{ ':DELETED' };  
       }  
     
-    my $tdiff = ( $ttime < time() ? "^Wr^ OVERDUE " : "^G^ IN " ) . short_time_diff( time() - $ttime ) . " ^^";
+    my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     my $ttimes = scalar( localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
     my $ggc = $count % 2 ? 'Y' : 'y';
     $tdiff = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
-    pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff\t$name");
+    pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff $name");
     $count++;
     }
   
@@ -1184,25 +1184,28 @@ sub short_time_diff
 {
   my $diff = abs( shift );
   
-  my $d = int( $diff / ( 24*60*60 ) );
+  my $d = int( $diff / (    24*60*60 ) );
+  my $o = int( $diff / ( 30*24*60*60 ) );
+
+  return __om( $o, "mo", "mos" ) if $d > 99;
   
   return __om( $d, "day", "days" ) if $d > 0;
 
   my $h = int( $diff / ( 60*60 ) );
 
-  return __om( $h, "hour", "hours" ) if $h > 0;
+  return __om( $h, "hr", "hrs" ) if $h > 0;
 
   my $m = int( $diff / 60 );
 
-  return __om( $m, "minute", "minutes" ) if $m > 0;
+  return __om( $m, "min", "mins" ) if $m > 0;
 
-  return __om( $diff, "second", "seconds" );
+  return __om( $diff, "sec", "secs" );
 }
 
 sub __om
 {
   my $n = shift;
-  return "$n " . ( $n == 1 ? $_[0] : $_[1] );
+  return sprintf "%2d %-4s", $n, ( $n == 1 ? $_[0] : $_[1] );
 }
 
 ##############################################################################
