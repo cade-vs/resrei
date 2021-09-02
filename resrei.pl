@@ -23,6 +23,7 @@ use Data::Stacker;
 TODO: limit clause for count: new in a week repeat weekly limit 4 times
 TODO: limit clause for time:  new in a week repeat weekly limit until 4th dec
 TODO: first/last: new on last sat of jun 2021
+TODO: set 'near time' per event, default is now 30 days
 
 =cut
 ##############################################################################
@@ -41,6 +42,7 @@ options:
   -d       -- increase debug level
   -y       -- assume YES to all questions (disables -n)
   -n       -- assume NO  to all questions (disables -y)
+  -q       -- suppress non-urgent messages
 
 commands:
 
@@ -55,14 +57,14 @@ commands:
   LIST ALL             -- list all events
   LIST DELETED         -- list deleted events
   LIST OVERDUE         -- list overdue events only
-  LIST ACTIVE          -- list active (not reached and overdue) events
+  LIST ACTIVE          -- list active (targets in 7 days and overdue) events
   CHECK <ID>...        -- mark <ID>.. events as checked (i.e. seen/done)
   UNCHECK <ID>...      -- removed checked mark for <ID>... events
 
   commands have aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
                           REPEAT=REP, CHECK=C, UNCHECK=U
        
-  LIST cmd has aliases: ALL=A, DELETED=D, OVERDUE=O, ACTIVE=I
+  LIST cmd has aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A
 
 timespec specification examples:
 
@@ -210,7 +212,7 @@ my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month 
 
 my %LIST_TYPES = (
                  'all'     => 'all',
-                 'a'       => 'all',
+                 'l'       => 'all',
                  'del'     => 'deleted',
                  'deleted' => 'deleted',
                  'd'       => 'deleted',
@@ -218,7 +220,7 @@ my %LIST_TYPES = (
                  'overdue' => 'overdue',
                  'o'       => 'overdue',
                  'active'  => 'active',
-                 'i'       => 'active',
+                 'a'       => 'active',
                  );
 
 ##############################################################################
@@ -229,6 +231,7 @@ my $opt_always_yes;
 my $opt_always_no;
 my $opt_allow_past;
 my $opt_no_colors;
+my $opt_quiet;
 
 our @args;
 our @args2;
@@ -265,6 +268,11 @@ while( @ARGV )
   if( /-b/ )
     {
     $opt_no_colors = 1;
+    next;
+    }
+  if( /-q/ )
+    {
+    $opt_quiet = 1;
     next;
     }
   if( /^-d/ )
@@ -498,7 +506,7 @@ sub cmd_list
 
   my $count = list_events( $type, sort { $a <=> $b } @$list );
   
-  return pc( "no events of type '$type' to list" ) unless $count;
+  return pc( "no events of type '$type' to list" ) unless $count or $opt_quiet;
 }
 
 sub list_events
@@ -532,7 +540,7 @@ sub list_events
     elsif( $type eq 'active' )
       {
       next if $data->{ ':DELETED' } or $data->{ 'CHECKED' };
-      next if $ttime - time() > 30*24*60*60;
+      next if $ttime - time() > 7*24*60*60;
       }
     else
       {
