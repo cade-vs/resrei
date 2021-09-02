@@ -106,23 +106,23 @@ my %__PC_COLORS =
                    (
                       # foregrounds 
                       'fk' => '0;30', #blacK
-                      'fr' => '0;31', 	#Red
-                      'fg' => '0;32', 	#Green
-                      'fy' => '0;33', 	#Yellow
-                      'fb' => '0;34', 	#Blue
-                      'fp' => '0;35', 	#Purple
-                      'fc' => '0;36', 	#Cyan
-                      'fw' => '0;37', 	#White
+                      'fr' => '0;31', #Red
+                      'fg' => '0;32', #Green
+                      'fy' => '0;33', #Yellow
+                      'fb' => '0;34', #Blue
+                      'fp' => '0;35', #Purple
+                      'fc' => '0;36', #Cyan
+                      'fw' => '0;37', #White
 
                       # high foregrounds 
                       'fK' => '1;30', #blacK
-                      'fR' => '1;31', 	#Red
-                      'fG' => '1;32', 	#Green
-                      'fY' => '1;33', 	#Yellow
-                      'fB' => '1;34', 	#Blue
-                      'fP' => '1;35', 	#Purple
-                      'fC' => '1;36', 	#Cyan
-                      'fW' => '1;37', 	#White
+                      'fR' => '1;31', #Red
+                      'fG' => '1;32', #Green
+                      'fY' => '1;33', #Yellow
+                      'fB' => '1;34', #Blue
+                      'fP' => '1;35', #Purple
+                      'fC' => '1;36', #Cyan
+                      'fW' => '1;37', #White
 
                       # backgrounds 
                       'bk' => '40', 	#blacK
@@ -323,12 +323,14 @@ sub exec_cmd
   return cmd_new( $args, $args2 )    if $cmd =~ /^n(ew)?/i;
   return cmd_del( $args )            if $cmd =~ /^del(ete)?/i;
   return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
+  return cmd_move( $args )           if $cmd =~ /^m(ove)?/i;
   return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name/i;
   return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
   return cmd_view( [ $1 ] )          if $cmd =~ /^(\d+)/i;
   return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
   return cmd_check( $args )          if $cmd =~ /^c(heck)?/i;
   return cmd_uncheck( $args )        if $cmd =~ /^u(n(c(heck)?)?)?/i;
+  return print( $HELP )              if $cmd =~ /^h(elp)?|\?/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -538,16 +540,39 @@ sub list_events
       }  
     
     my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
-    my $ttimes = scalar( localtime( $ttime ) );
+    my $ttimes = strftime( "%a %b %d %H:%M %Y", localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
-    my $ggc = $count % 2 ? 'Y' : 'y';
+    my $ggc = $count % 2 ? 'y' : 'w';
     $tdiff = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
-    pc( "^R^ $id ^^ ^$ggc^$ttimes^^$repeat $tdiff $name");
+    pc( "^R^ $id ^$ggc^$ttimes^^$repeat $tdiff ^R^ $id ^$ggc^$name");
     $count++;
     }
   
   return $count;  
+}
+
+sub cmd_move
+{
+  my $args = shift;
+
+  my $id = shift @$args;
+  cmd_view( $id );
+
+  my $data = db_load( $id );
+
+  my ( $time, $repeat ) = parse_time( @$args );
+  my $nows = scalar localtime( $data->{ 'TTIME'       } );
+  my $tens = scalar localtime( $time  );
+  my $diff = unix_time_diff_in_words_relative( time() - $time );
+  
+  pc( "current event time: ^Y^$nows" );
+  pc( "move to new   time: ^G^$tens^^  $diff" );
+
+  return unless confirm( "confirm new target time?" );
+  
+  $data->{ 'TTIME' } = $time;
+  db_save( $data );
 }
 
 sub cmd_rename
@@ -597,6 +622,8 @@ sub cmd_repeat
 sub cmd_view
 {
   my $args = shift;
+  
+  $args = [ $args ] unless ref( $args ) eq 'ARRAY';
 
   for my $id ( @$args )
     {
@@ -1184,10 +1211,13 @@ sub short_time_diff
 {
   my $diff = abs( shift );
   
-  my $d = int( $diff / (    24*60*60 ) );
-  my $o = int( $diff / ( 30*24*60*60 ) );
+  my $d = int( $diff / (     24*60*60 ) );
+  my $o = int( $diff / (  30*24*60*60 ) );
+  my $y = int( $diff / ( 365*24*60*60 ) );
 
-  return __om( $o, "mo", "mos" ) if $d > 99;
+  return __om( $y, "yr", "yrs" ) if $o > 14;
+
+  return __om( $o, "mo", "mos" ) if $d > 64;
   
   return __om( $d, "day", "days" ) if $d > 0;
 
