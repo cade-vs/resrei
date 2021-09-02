@@ -962,7 +962,7 @@ sub parse_time_on
       }
     elsif( /^(\d\d\d\d)[\.\/\-](\d\d?)[\.\/\-](\d\d?)$/ )
       {
-      my ( $year, $mon, $day ) = ( $1, $2, $3 );
+      ( $year, $mon, $day ) = ( $1, $2, $3 );
       next;
       }
     else
