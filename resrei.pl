@@ -405,7 +405,7 @@ sub cmd_del
 {
   my $args = shift;
 
-  my $count = list_events( @$args  );
+  my $count = list_events( 'all', @$args  );
   
   return pc( "no events to delete" ) unless $count;
   return unless confirm( "delete listed events?" );
@@ -418,7 +418,7 @@ sub cmd_del
     db_save( $data );
     }
   
-  pc( "^Wr^ DELETED! ^^ (use 'list trash' to view deleted)" );
+  pc( "^Wr^ DELETED! ^^ (use 'list deleted' to view deleted)" );
 }
 
 sub cmd_check
@@ -522,7 +522,7 @@ sub list_events
     
     if( $type eq 'overdue' )
       {
-      next if $data->{ ':DELETED' };
+      next if $data->{ ':DELETED' } or $data->{ 'CHECKED' };
       next if $ttime > time(); 
       }
     elsif( $type eq 'deleted' )
@@ -532,6 +532,7 @@ sub list_events
     elsif( $type eq 'active' )
       {
       next if $data->{ ':DELETED' } or $data->{ 'CHECKED' };
+      next if $ttime - time() > 30*24*60*60;
       }
     else
       {
@@ -543,9 +544,11 @@ sub list_events
     my $ttimes = strftime( "%a %b %d %H:%M %Y", localtime( $ttime ) );
     my $name  = $data->{ 'NAME' };
     my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
+    my $del    = $data->{ ':DELETED' } ? "^R^D^^" : ' ';
     my $ggc = $count % 2 ? 'y' : 'w';
+    my $ids = sprintf( "%3d", $id );
     $tdiff = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
-    pc( "^R^ $id ^$ggc^$ttimes^^$repeat $tdiff ^R^ $id ^$ggc^$name");
+    pc( "^R^$ids ^$ggc^$ttimes^^$repeat$del$tdiff ^R^$ids ^$ggc^$name");
     $count++;
     }
   
