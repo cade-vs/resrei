@@ -647,8 +647,33 @@ sub cmd_view
       {
       pc( " ^Wr^error: cannot load event id $id " );
       }
+
+    my $id      = $data->{ ':ID'  };
+    my $name    = $data->{ 'NAME'  };
+    my $ttime   = $data->{ 'TTIME' };
+    my $ttime_s = $data->{ 'TTIME_STR' };
+    my $ctime   = $data->{ 'CTIME' };
+    my $ctime_s = $data->{ 'CTIME_STR' };
+    my $mtime   = $data->{ 'MTIME' };
+    my $mtime_s = $data->{ 'MTIME_STR' };
+    my $deleted = $data->{ ':DELETED' };
     
-    print Dumper( $data );
+    my $deleted_s = scalar localtime $deleted;
+   
+    my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
+    my $repeat_str = repeat_time_str( $data->{ 'TREPEAT' } ) if $data->{ 'TREPEAT' };
+
+    my $del_diff = unix_time_diff_in_words_relative( time() - $deleted );
+
+    pc( "ID:          ^C^$name" );
+    pc( "title:       ^Y^$name" );
+    pc( "target time: ^Y^$ttime_s $tdiff" );
+    pc( "repeat:      ^C^$repeat_str" ) if $repeat_str;
+    pc( "create time: ^Y^$ctime_s" );
+    pc( "modify time: ^Y^$mtime_s" ) if $mtime;
+    pc( "deleted at:  ^R^$deleted_s -- $del_diff" ) if $deleted;
+    print "-----------------------------------------\n" if $DEBUG > 0;
+    print Dumper( $data ) if $DEBUG > 0;
     print "-----------------------------------------\n";
     }
   
