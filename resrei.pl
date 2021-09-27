@@ -2,7 +2,7 @@
 ##############################################################################
 ##
 ##  RESREI calendar remainder todo
-##  2019-202 (c) Vladi Belperchinov-Shabanski "Cade"
+##  2019-2021 (c) Vladi Belperchinov-Shabanski "Cade"
 ##  <cade@bis.bg> <cade@biscom.net> <cade@cpan.org>
 ##
 ##  LICENSE: GPLv2
@@ -24,6 +24,7 @@ TODO: limit clause for count: new in a week repeat weekly limit 4 times
 TODO: limit clause for time:  new in a week repeat weekly limit until 4th dec
 TODO: first/last: new on last sat of jun 2021
 TODO: set 'near time' per event, default is now 30 days
+TODO: add "on monday at 9" ... etc.
 
 =cut
 ##############################################################################
@@ -514,7 +515,7 @@ sub list_events
   my $type = shift;
   my @ev = @_;
 
-  @ev = sort { db_ttime( $a ) <=> db_ttime( $b ) } @ev if $type eq 'active' or $type eq 'overdue';
+  @ev = sort { db_ttime( $a ) <=> db_ttime( $b ) } @ev; # if $type eq 'active' or $type eq 'overdue';
   
   my $count;
   for my $id ( @ev )
@@ -548,15 +549,17 @@ sub list_events
       next if $data->{ ':DELETED' };  
       }  
     
-    my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
+    my $tdiff  = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     my $ttimes = strftime( "%a %b %d %H:%M %Y", localtime( $ttime ) );
-    my $name  = $data->{ 'NAME' };
-    my $repeat = $data->{ 'TREPEAT' } ? "^C^R^^" : ' ';
+    my $name   = $data->{ 'NAME'     };
+    my $repeat = $data->{ 'TREPEAT'  } ? "^C^R^^" : ' ';
     my $del    = $data->{ ':DELETED' } ? "^R^D^^" : ' ';
-    my $ggc = $count % 2 ? 'y' : 'w';
-    my $ids = sprintf( "%3d", $id );
-    $tdiff = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
-    pc( "^R^$ids ^$ggc^$ttimes^^$repeat$del$tdiff ^R^$ids ^$ggc^$name");
+    my $ggc    = $count % 2 ? 'y' : 'w';
+    my $ids    = sprintf( "%3d", $id );
+    
+    $tdiff     = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
+    pc( "^c^$ids ^$ggc^$ttimes^^$repeat$del$tdiff ^c^$ids ^$ggc^$name");
+    
     $count++;
     }
   
@@ -865,7 +868,7 @@ sub parse_time
       }
     else
       {
-      die "invalid timespec at [$_]\n";
+      die "invalid timespec at [$_] expected one of [in on next repeat at]\n";
       }  
     }
   return ( $ts, $tr );
@@ -880,7 +883,7 @@ sub parse_time_repeat
   while( @$ta )
     {
     $_ = shift @$ta;
-    $a = 0;
+    my $a = 0;
 
 #print STDERR "repeat: [$_]\n";
     
@@ -890,7 +893,12 @@ sub parse_time_repeat
       $_ = lc shift @$ta;
       }
 
-    if( /^(every|and)/ )
+    if( /^(every)/ )
+      {
+      $a = 1;
+      $_ = lc shift @$ta;
+      }
+    if( /^(and)/ )
       {
       next;
       }
@@ -926,6 +934,7 @@ sub parse_time_repeat
 
       $tr->{ 'MONTHS'  } += $add if $type eq 'O'; # months
       $tr->{ 'YEARS'   } += $add if $type eq 'Y';  # years
+
       next;
       }
     else
@@ -1181,6 +1190,10 @@ sub parse_time_at
       {
       $tt = 12 * 60 * 60;
       }
+    elsif( lc $_ eq 'midnight' )
+      {
+      $tt = 23 * 60 * 60 + 59 * 60 + 59;
+      }
     else
       {
       unshift @$ta, $_;
@@ -1208,12 +1221,12 @@ sub repeat_time_str
   my $repeat_str;
   
   my @repeat;
-  push @repeat, "$yr years"  if $yr > 0;
-  push @repeat, "$yr months" if $mo > 0;
-  push @repeat, "$d days"    if $d > 0;
-  push @repeat, "$h hours"   if $h > 0;
-  push @repeat, "$m minutes" if $m > 0;
-  push @repeat, "$s seconds" if $s > 0;
+  push @repeat, __oms( $yr, "year",   "years"   ) if $yr > 0;
+  push @repeat, __oms( $mo, "month",  "months"  ) if $mo > 0;
+  push @repeat, __oms( $d,  "day",    "days"    ) if $d  > 0;
+  push @repeat, __oms( $h,  "hour",   "hours"   ) if $h  > 0;
+  push @repeat, __oms( $m,  "minute", "minutes" ) if $m  > 0;
+  push @repeat, __oms( $s,  "second", "seconds" ) if $s  > 0;
 
   return join ', ', @repeat;
 }
@@ -1247,6 +1260,12 @@ sub __om
 {
   my $n = shift;
   return sprintf "%2d %-4s", $n, ( $n == 1 ? $_[0] : $_[1] );
+}
+
+sub __oms
+{
+  my $n = shift;
+  return $n . ' ' . ( $n == 1 ? $_[0] : $_[1] );
 }
 
 ##############################################################################
