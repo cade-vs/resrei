@@ -221,6 +221,10 @@ RESREI name is actually combined two forms of the same latin word: RES, REI:
 
     http://latin-dictionary.net/definition/33404/res-rei
 
+# LICENSE
+
+RESREI is licensed under GPLv2, for full text see file "COPYING".
+
 # GITHUB REPOSITORY
 
     https://github.com/cade-vs/resrei
