@@ -28,6 +28,9 @@ RESRES has console interface or interactive mode, which doubles as internal
 command line but allows shorter commands due to having a context (i.e. active
 reminder, last reminder, etc.)
 
+RESREI is supposed to be aliased as 'rr' but you may prefer something else.
+In the following text, all examples will use 'rr' instead of 'resrei.pl'.
+
 # COMMANDS (FUNCTIONS)
 
 RESREI has the following comands (aka functions):
