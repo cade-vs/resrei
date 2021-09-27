@@ -118,13 +118,32 @@ Example:
     8 Sun Sep 11 11:30 2022R   IN 11 mos     8 Renew insurance
     
 This is reminder '8', it is repeat reminder with target time 11th Sep 2022.
-To see repeat time:
+To see repeat time use the VIEW command described below.
+
+## VIEW
+
+To see details about single or multiple reminders:
 
     rr 8
     rr view 8
     
-Both will show all details about this remidnder event.    
+Both will show all details about remidnder event with ID 8. 
+Even though VIEW command can be skipped and only ID can be specified,
+VIEW has the advantage to show multiple IDs at once:
+
+    rr view 8 16 11
     
+## CHECK
+
+CHECK marks reminder as done. For non repeating reminders, this means that
+the reminder will no longer be active (unless moved to future time with the
+MOVE command described below).
+
+For repeating reminder events, CHECK will mark event as seen and move target
+time ahead in the future with the repeat time. CHECK will move target time
+for repeating events relative to the original target time. If multiple 
+target times are missed before CHECK, RESREI will move ahead target time
+to the first one which is in the future.
 
 
 # EXAMPLES
