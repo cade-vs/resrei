@@ -32,6 +32,16 @@ reminder, last reminder, etc.)
 
 RESREI has the following comands (aka functions):
 
+## HELP
+
+HELP displays help text:
+
+    rr help
+    rr h
+    rr -h
+    
+All of the above will display help text with examples.
+
 ## NEW
 
 NEW creates new reminder. It requires at least reminder titile (description):
@@ -145,10 +155,52 @@ for repeating events relative to the original target time. If multiple
 target times are missed before CHECK, RESREI will move ahead target time
 to the first one which is in the future.
 
+CHECK sets reminder to inactive status. This means that reminder is not 
+deleted but marked as seen.
 
-# EXAMPLES
+## UNCHECK
 
-    ...
+UNCHECK removes the check mark, which effectively sets reminder back to 
+active status. For repeating reminders, UNCHECK has no meaning and will
+not move back target time.
+
+## RENAME
+
+RENAME sets new title:
+
+    rr rename 8 this is new title message
+
+## MOVE
+
+MOVE moves target time for specified reminder ID to new one:
+
+    rr move 8 on 2022 march 2nd at 6pm
+    
+## REPEAT
+
+REPEAT sets new repeat time for specified reminder ID:
+
+    rr repeat 8 weekly
+    rr repeat 8 every year and 8 days
+    rr repeat 8 5 days 10 hrs
+
+# INTERACTIVE MODE
+
+If run without any arguments, RESREI will enter interactive mode. In this mode
+all described commands will act the same but there will be command line with
+editing capabilities and completion with TAB key.
+
+# USING RESREI
+
+Your usage cases may vary, but I use RESREI to show me all active reminders
+every time when I start new terminal window. I have in my ~/.profile file:
+
+    rr -q l a
+    
+On my home machine I also have RESREI show active reminders on my lock screen,
+using i3lock and custom perl script for painting background lock image. If you
+are interested in this case, I'll send you details on e-mail since the scope
+of this document is different.
 
 # GITHUB REPOSITORY
 

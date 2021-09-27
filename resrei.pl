@@ -32,7 +32,7 @@ TODO: add "on monday at 9" ... etc.
 my $DEBUG;
 my $HELP = <<END_OF_HELP;
 
-usage: $0 <options> <command> <timespec> -- message
+usage: $0 <options> <command> <timespec> -- title message
 
 options:
 
@@ -52,7 +52,7 @@ commands:
   <ID>...              -- (no command) show details for event <ID>... list
   DEL  <ID>...         -- delete given event <ID>... list
   MOVE <ID> <timespec> -- move event with <ID> to new time
-  RENAME <ID> <name>   -- sets event <ID> name to <name>
+  RENAME <ID> <title>  -- sets event <ID> title to <title>
   REPEAT <ID> <repeat> -- sets new repeat interval for <ID> event
   LIST                 -- list upcoming events
   LIST ALL             -- list all events
@@ -467,7 +467,7 @@ sub cmd_check
       $data->{ 'CHECKED' } = time();
       }  
     $data->{ 'CHECKED_TIMES' } ||= [];
-    push @{ $data->{ 'CHECKED_TIMES' } }, time();
+    unshift @{ $data->{ 'CHECKED_TIMES' } }, time();
 
     db_save( $data );
     list_events( 'all', $id );
@@ -481,7 +481,7 @@ sub cmd_uncheck
   my $count = list_events( 'all', @$args  );
 
   return pc( "no events to UNCHECK" ) unless $count;
-  return unless confirm( "UNCHECK listed events ^y^(repeat events will start new period)^^?" );
+  return unless confirm( "UNCHECK listed events ^y^(repeat events will not be moved back)^^?" );
 
   for my $id ( @$args )
     {
@@ -724,7 +724,8 @@ sub ec
   my $msg = shift;
   
   $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
-  return $msg . "\e[0m";
+  $msg .= "\e[0m" unless $opt_no_colors;
+  return $msg;
 }
 
 sub __pc
