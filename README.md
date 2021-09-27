@@ -205,6 +205,16 @@ using i3lock and custom perl script for painting background lock image. If you
 are interested in this case, I'll send you details on e-mail since the scope
 of this document is different.
 
+# INSTALL
+
+Check "install-perl-cpan-modules.sh" file to see required perl modules.
+You can safely run this file as script:
+
+    chmod +x install-perl-cpan-modules.sh
+    ./install-perl-cpan-modules.sh
+    
+As root user or as regular user if CPAN is setup accordingly.
+
 # GITHUB REPOSITORY
 
     https://github.com/cade-vs/resrei
