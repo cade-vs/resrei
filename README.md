@@ -215,6 +215,12 @@ You can safely run this file as script:
     
 As root user or as regular user if CPAN is setup accordingly.
 
+# NAME
+
+RESREI name is actually combined two forms of the same latin word: RES, REI:
+
+    http://latin-dictionary.net/definition/33404/res-rei
+
 # GITHUB REPOSITORY
 
     https://github.com/cade-vs/resrei
