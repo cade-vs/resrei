@@ -118,14 +118,14 @@ my %__PC_COLORS =
                       'fw' => '0;37', #White
 
                       # high foregrounds 
-                      'fK' => '1;30', #blacK
-                      'fR' => '1;31', #Red
-                      'fG' => '1;32', #Green
-                      'fY' => '1;33', #Yellow
-                      'fB' => '1;34', #Blue
-                      'fP' => '1;35', #Purple
-                      'fC' => '1;36', #Cyan
-                      'fW' => '1;37', #White
+                      'fK' => '0;90', #blacK
+                      'fR' => '0;91', #Red
+                      'fG' => '0;92', #Green
+                      'fY' => '0;93', #Yellow
+                      'fB' => '0;94', #Blue
+                      'fP' => '0;95', #Purple
+                      'fC' => '0;96', #Cyan
+                      'fW' => '0;97', #White
 
                       # backgrounds 
                       'bk' => '40', 	#blacK
@@ -138,14 +138,14 @@ my %__PC_COLORS =
                       'bw' => '47', 	#White
 
                       # hight backgrounds 
-                      'bK' => '90', 	#blacK
-                      'bR' => '91', 	#Red
-                      'bG' => '92', 	#Green
-                      'bY' => '93', 	#Yellow
-                      'bB' => '94', 	#Blue
-                      'bP' => '95', 	#Purple
-                      'bC' => '96', 	#Cyan
-                      'bW' => '97', 	#White
+                      'bK' => '0;100', 	#blacK
+                      'bR' => '0;101', 	#Red
+                      'bG' => '0;102', 	#Green
+                      'bY' => '0;103', 	#Yellow
+                      'bB' => '0;104', 	#Blue
+                      'bP' => '0;105', 	#Purple
+                      'bC' => '0;106', 	#Cyan
+                      'bW' => '0;107', 	#White
                    );
 
 my %WEEK_DAYS_SHORT = (
@@ -549,7 +549,16 @@ sub list_events
       next if $data->{ ':DELETED' };  
       }  
     
-    my $tdiff  = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
+#     my $tdiff  = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
+    
+    
+    my $stdiff = short_time_diff( time() - $ttime );
+    my $tdiff;
+    
+    $tdiff  = "^G^  IN $stdiff ^^"  if $ttime >  time();
+    $tdiff  = "^Wr^ DUE $stdiff ^^" if $ttime <= time();
+    $tdiff  = "^rw^ DUE $stdiff ^^" if time() - $ttime > 7*24*60*60;
+    
     my $ttimes = strftime( "%a %b %d %H:%M %Y", localtime( $ttime ) );
     my $name   = $data->{ 'NAME'     };
     my $repeat = $data->{ 'TREPEAT'  } ? "^C^R^^" : ' ';
@@ -740,7 +749,7 @@ sub __pc
   
   $fg = '0'       if ! $fg;
   $bg = ';' . $bg if   $bg;
-  
+
   return "\e[${fg}${bg}m";
 } 
 
