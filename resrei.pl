@@ -102,6 +102,7 @@ more examples:
 
     resrei new on next sat at 11:30 repeat weekly
     resrei new in a week and 1 day at 11pm -- evening test
+    resrei -- quick new note text
 
 END_OF_HELP
 
@@ -290,10 +291,11 @@ while( @ARGV )
   }
 
 dir_path_ensure( $DATA_DIR ) or die "fatal: cannot access data dir [$DATA_DIR]\n";
+print STDERR "using data dir: [$DATA_DIR]\n" if $DEBUG;
 
 ##############################################################################
 
-if( @args )
+if( @args or @args2 )
   {
   exec_cmd( shift( @args ), \@args, \@args2 );
   }
@@ -329,6 +331,7 @@ sub exec_cmd
   my $args  = shift;
   my $args2 = shift;
 
+  return cmd_new( $args, $args2 )    if $cmd eq '' and @$args == 0 and @$args2 > 0;
   return cmd_new( $args, $args2 )    if $cmd =~ /^n(ew)?/i;
   return cmd_del( $args )            if $cmd =~ /^del(ete)?/i;
   return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
