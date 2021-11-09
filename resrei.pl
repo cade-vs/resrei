@@ -62,10 +62,10 @@ commands:
   CHECK <ID>...        -- mark <ID>.. events as checked (i.e. seen/done)
   UNCHECK <ID>...      -- removed checked mark for <ID>... events
 
-  commands have aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
-                          REPEAT=REP, CHECK=C, UNCHECK=U
+  commands aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
+                     REPEAT=REP, CHECK=C, UNCHECK=U
        
-  LIST cmd has aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A
+  LIST cmd aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A
 
 timespec specification examples:
 
@@ -677,12 +677,12 @@ sub cmd_view
 
     my $del_diff = unix_time_diff_in_words_relative( time() - $deleted );
 
-    pc( "ID:          ^C^$name" );
+    pc( "ID:          ^C^$id" );
     pc( "title:       ^Y^$name" );
-    pc( "target time: ^Y^$ttime_s $tdiff" );
+    pc( "target time: ^G^$ttime_s $tdiff" );
     pc( "repeat:      ^C^$repeat_str" ) if $repeat_str;
-    pc( "create time: ^Y^$ctime_s" );
-    pc( "modify time: ^Y^$mtime_s" ) if $mtime;
+    pc( "create time: ^y^$ctime_s" );
+    pc( "modify time: ^y^$mtime_s" ) if $mtime;
     pc( "deleted at:  ^R^$deleted_s -- $del_diff" ) if $deleted;
     print "-----------------------------------------\n" if $DEBUG > 0;
     print Dumper( $data ) if $DEBUG > 0;
