@@ -59,13 +59,21 @@ commands:
   LIST DELETED         -- list deleted events
   LIST OVERDUE         -- list overdue events only
   LIST ACTIVE          -- list active (targets in 7 days and overdue) events
+  LIST FULL            -- list alpha-sorted list of all events
   CHECK <ID>...        -- mark <ID>.. events as checked (i.e. seen/done)
   UNCHECK <ID>...      -- removed checked mark for <ID>... events
 
   commands aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
                      REPEAT=REP, CHECK=C, UNCHECK=U
        
-  LIST cmd aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A
+  LIST cmd aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A, F=FULL
+
+environment configuration:
+
+  export RESREI_DEFAULT_DATE_FORMAT=MDY
+  
+  sets default format for XX.XX.XXXX time specs
+  if not specified or other value set, DMY is assumed
 
 timespec specification examples:
 
@@ -223,6 +231,8 @@ my %LIST_TYPES = (
                  'o'       => 'overdue',
                  'active'  => 'active',
                  'a'       => 'active',
+                 'full'    => 'full',
+                 'f'       => 'full',
                  );
 
 ##############################################################################
@@ -332,7 +342,7 @@ sub exec_cmd
   my $args2 = shift;
 
   return cmd_new( $args, $args2 )    if $cmd eq '' and @$args == 0 and @$args2 > 0;
-  return cmd_new( $args, $args2 )    if $cmd =~ /^n(ew)?/i;
+  return cmd_new( $args, $args2 )    if $cmd =~ /^(n(ew)?|add)/i;
   return cmd_del( $args )            if $cmd =~ /^del(ete)?/i;
   return cmd_list( $args, $args2 )   if $cmd =~ /^l(ist)?/i;
   return cmd_move( $args )           if $cmd =~ /^m(ove)?/i;
@@ -507,8 +517,12 @@ sub cmd_list
   return pc( "unknown list type [$type] expected one of: all, deleted, overdue" ) unless $type;
 
   my $list = db_list();
+  
+  @$list = sort { $a <=> $b } @$list;
+  @$list = sort { db_ttime( $a ) <=> db_ttime( $b ) } @$list if $type eq 'active' or $type eq 'overdue';
+  @$list = sort { db_name( $a )  cmp db_name( $b )  } @$list if $type eq 'full';
 
-  my $count = list_events( $type, sort { $a <=> $b } @$list );
+  my $count = list_events( $type, @$list );
   
   return pc( "no events of type '$type' to list" ) unless $count or $opt_quiet;
 }
@@ -518,8 +532,6 @@ sub list_events
   my $type = shift;
   my @ev = @_;
 
-  @ev = sort { db_ttime( $a ) <=> db_ttime( $b ) } @ev; # if $type eq 'active' or $type eq 'overdue';
-  
   my $count;
   for my $id ( @ev )
     {
@@ -761,6 +773,7 @@ sub __pc
 sub __make_id_fn
 {
   my $id = shift;
+  die "invalid ID [$id]\n" unless $id;
   return "$DATA_DIR/$id.rrdata";
 }
 
@@ -828,6 +841,16 @@ sub db_ttime
   return 0 unless $data;
 
   return $data->{ 'TTIME' };
+}
+
+sub db_name
+{
+  my $id   = shift;
+  
+  my $data = db_load( $id );
+  return undef unless $data;
+
+  return $data->{ 'NAME' };
 }
 
 ### PARSE TIME ###############################################################
@@ -1020,6 +1043,16 @@ sub parse_time_on
       ( $year, $mon, $day ) = ( $1, $2, $3 );
       next;
       }
+    elsif( /^(\d\d?)[\.\/\-](\d\d?)[\.\/\-](\d\d\d\d)$/ )
+      {
+      ( $day, $mon, $year ) = $ENV{ 'RESREI_DEFAULT_DATE_FORMAT' } eq 'MDY' ? ( $2, $1, $3 ) : ( $1, $2, $3 );
+      next;
+      }
+#    elsif( /^(\d\d?)[\.\/\-](\d\d?)$/ ) # TODO: MM.DD or DD.MM
+#      {
+#      ( $day, $mon, $year ) = $ENV{ 'RESREI_DEFAULT_DATE_FORMAT' } eq 'MDY' ? ( $2, $1, $3 ) : ( $1, $2, $3 );
+#      next;
+#      }
     else
       {
       unshift @$ta, $_;
