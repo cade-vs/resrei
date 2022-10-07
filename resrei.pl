@@ -2,7 +2,7 @@
 ##############################################################################
 ##
 ##  RESREI calendar remainder todo
-##  2019-2021 (c) Vladi Belperchinov-Shabanski "Cade"
+##  2019-2022 (c) Vladi Belperchinov-Shabanski "Cade"
 ##  <cade@bis.bg> <cade@biscom.net> <cade@cpan.org>
 ##
 ##  LICENSE: GPLv2
@@ -535,12 +535,7 @@ sub list_events
   my $count;
   for my $id ( @ev )
     {
-    my $data = db_load( $id );
-    if( ! $data )
-      {
-      pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
-      next;
-      }
+    my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
     
     my $ttime = $data->{ 'TTIME' };
     
@@ -597,7 +592,7 @@ sub cmd_move
   my $id = shift @$args;
   cmd_view( $id );
 
-  my $data = db_load( $id );
+  my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
 
   my ( $time, $repeat ) = parse_time( @$args );
   my $nows = scalar localtime( $data->{ 'TTIME'       } );
@@ -623,7 +618,8 @@ sub cmd_rename
   $name = getline( 'enter new name:' ) unless $name;
   return pc( 'cancelled.' ) unless $name;
 
-  my $data = db_load( $id );
+  my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
+
   my $old  = $data->{ 'NAME' } || '<unnamed>';
 
   pc( "rename ^R^ $id ^^ ^c^from^^ $old");
@@ -652,7 +648,8 @@ sub cmd_repeat
   
   return unless confirm( "confirm new repeat time?" );
   
-  my $data = db_load( $id );
+  my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
+
   $data->{ 'TREPEAT' } = $repeat;  
   db_save( $data );
 }
@@ -665,12 +662,7 @@ sub cmd_view
 
   for my $id ( @$args )
     {
-    my $data = db_load( $id );
-    
-    if( ! $data )
-      {
-      pc( " ^Wr^error: cannot load event id $id " );
-      }
+    my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
 
     my $id      = $data->{ ':ID'  };
     my $name    = $data->{ 'NAME'  };
@@ -741,6 +733,7 @@ sub pc
   my $msg = shift;
   
   print ec( $msg ), "\n";
+  return undef;
 }
 
 sub ec
@@ -810,12 +803,21 @@ sub db_list
   return \@list;
 }
 
-sub db_load
+sub db_exists
 {
   my $id = shift;
 
   my $fn = __make_id_fn( $id );
-  return unstack_data( file_load( $fn ) ) or die " cannot load data from [$fn]\n";
+  return -e $fn;
+}
+
+sub db_load
+{
+  my $id = shift;
+
+  my $fn   = __make_id_fn( $id );
+  my $data = file_load( $fn ) or return undef;
+  return unstack_data( $data ) or return undef;
 }
 
 sub db_save
@@ -824,7 +826,7 @@ sub db_save
 
   my $id = $data->{ ':ID' };
   my $fn = __make_id_fn( $id );
-  return file_save( $fn, stack_data( $data ) ) or die " cannot load data from [$fn]\n";
+  return file_save( $fn, stack_data( $data ) ) or return undef;
 }
 
 sub db_get_history
