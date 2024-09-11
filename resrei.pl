@@ -185,18 +185,19 @@ my %WEEK_DAYS = ( %WEEK_DAYS_SHORT, %WEEK_DAYS_LONG );
 
 my %MONTHS_SHORT = (
                 
-                jan =>  1,
-                feb =>  2,
-                mar =>  3,
-                apr =>  4,
-                may =>  5,
-                jun =>  6,
-                jul =>  7,
-                aug =>  8,
-                sep =>  9,
-                oct => 10,
-                nov => 11,
-                dec => 12,
+                jan  =>  1,
+                feb  =>  2,
+                mar  =>  3,
+                apr  =>  4,
+                may  =>  5,
+                jun  =>  6,
+                jul  =>  7,
+                aug  =>  8,
+                sep  =>  9,
+                sept =>  9,
+                oct  => 10,
+                nov  => 11,
+                dec  => 12,
                 
                 );
                 
@@ -604,7 +605,8 @@ sub cmd_move
 
   return unless confirm( "confirm new target time?" );
   
-  $data->{ 'TTIME' } = $time;
+  $data->{ 'TTIME'     } = $time;
+  $data->{ 'TTIME_STR' } = scalar localtime $time;
   db_save( $data );
 }
 
