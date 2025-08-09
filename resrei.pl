@@ -256,34 +256,34 @@ while( @ARGV )
     push @args2, @ARGV;
     last;
     }
-  if( /-a/ )
+  if( /^-a/ )
     {
     $DATA_DIR = shift;
     next;
     }
-  if( /-y/ )
+  if( /^-y/ )
     {
     $opt_always_yes = 1;
     $opt_always_no  = 0;
     next;
     }
-  if( /-n/ )
+  if( /^-n/ )
     {
     $opt_always_yes = 0;
     $opt_always_no  = 1;
     next;
     }
-  if( /-p/ )
+  if( /^-p/ )
     {
     $opt_allow_past = 1;
     next;
     }
-  if( /-b/ )
+  if( /^-b/ )
     {
     $opt_no_colors = 1;
     next;
     }
-  if( /-q/ )
+  if( /^-q/ )
     {
     $opt_quiet = 1;
     next;
@@ -728,8 +728,11 @@ sub confirm
 }
 
 # print color, escapes are: 
-# # fg bg? #
-# ## -- reset
+# ^ fg bg? ^
+# ^^ -- reset colors to default
+# examples:  ^Wr^ high-white on red background
+#            ^yb^ yellow on blue background
+#            ^rk^ red on blacK (key) background
 sub pc
 {
   my $msg = shift;
@@ -1146,23 +1149,27 @@ sub parse_time_in
       next;
       }
       
-    if( /^(\d+|a)$/ )
+    if( /^(\d+\.?\d*|a)$/ )
       {
       $a = $1 eq 'a' ? 1 : $1;
       $_ = lc shift @$ta;
+print ">>>>>>> tt[$a] [$_]\n";
       }
-    
-    if( /^(\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
+    if( /^(\d*\.?\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
       {
       my $type = uc substr( $2, 0, 1 );
       my $add = $1 || $a;
+
+      ( $add, $type ) = ( int( $add * ), '' ) if $type eq 'H'; # hours
       
       $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
       $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
       $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
+print ">>>>>>> tt[$tt] [$add] [$type]\n";
 
       $tt = utime_add_ymd( $tt, 0, $add, 0 ) if $type eq 'M'; # months
       $tt = utime_add_ymd( $tt, $add, 0, 0 ) if $type eq 'Y';  # years
+print ">>>>>>> tt[$tt] [$add]\n";
       next;
       }
     elsif( /^(\d*)(m(in(utes?)?)?)$/ ) # minutes minute min m
