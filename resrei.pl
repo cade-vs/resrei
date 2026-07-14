@@ -538,13 +538,14 @@ sub cmd_check
 
       while(4)
         {
-        $tt = utime_add_ymdhms( $tt, $yr, $mo, 0, 0, 0, $ss );
+        my $ntt = utime_add_ymdhms( $tt, $yr, $mo, 0, 0, 0, $ss );
+        return pc( "^R^ $id ^^ ^Wr^ has repeat flag but period is zero, probably data error" ) unless $ntt > $tt;
+        $tt = $ntt;
         last if $tt > time(); # repeat until next target time is in the future
         }
 
       $data->{ 'TTIME'     } = $tt;
       $data->{ 'TTIME_STR' } = scalar localtime $tt;
-
       }
     else
       {
@@ -584,8 +585,6 @@ sub cmd_list
   my $args = shift;
 
   my $type = $LIST_TYPES{ shift @$args } || 'all';
-
-  return pc( "unknown list type [$type] expected one of: all, deleted, overdue" ) unless $type;
 
   my $list = db_list();
 
@@ -749,7 +748,7 @@ sub cmd_view
     my $deleted_s = scalar localtime $deleted;
 
     my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
-    my $repeat_str = repeat_time_str( $data->{ 'TREPEAT' } ) if $data->{ 'TREPEAT' };
+    my $repeat_str = $data->{ 'TREPEAT' } ? repeat_time_str( $data->{ 'TREPEAT' } ) : undef;
 
     my $del_diff = unix_time_diff_in_words_relative( time() - $deleted );
 
