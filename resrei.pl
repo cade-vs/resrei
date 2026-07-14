@@ -423,7 +423,7 @@ sub exec_cmd
   return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
   return cmd_check( $args )          if $cmd =~ /^c(heck)?/i;
   return cmd_uncheck( $args )        if $cmd =~ /^u(n(c(heck)?)?)?/i;
-  return print( $HELP )              if $cmd =~ /^h(elp)?|\?/i;
+  return print( $HELP )              if $cmd =~ /^(h(elp)?|\?)$/i;
   print "error: unknown command '$cmd'! type 'help' or '?' for commands reference\n";
 }
 
@@ -778,8 +778,8 @@ sub getline
     $READLINE->Attribs->{ 'completion_function' } = \&autocomplete;
     }
 
-  my $input = $READLINE->readline( $prompt . ' ' );
-  $input =~ s/^//g; # remove colors :))
+  my $input = $READLINE->readline( ec( $prompt ) );
+  $input =~ s/\^(([krgybpcw])([krgybpcw])?)?\^//g; # remove color markup :))
   return $input;
 }
 
@@ -1316,8 +1316,8 @@ sub parse_time_at
       my $s = $5;
       my $p = uc $6;
 
-      $p = uc shift @$ta if ! $p and $ta->[0] =~ /^am|pm$/i;
-
+      $p = uc shift @$ta if ! $p and $ta->[0] =~ /^(am|pm)$/i;
+      
       $h += 12 if $p eq 'PM' and $h >= 0 and $h <= 12;
 
       $tt = $h * 60 * 60 + $m * 60 + $s;
