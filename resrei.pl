@@ -12,10 +12,10 @@ use strict;
 use POSIX;
 use Data::Dumper;
 use Time::HiRes;
-use Term::ReadLine::Tiny;
 use Data::Tools;
 use Data::Tools::Time;
 use Data::Stacker;
+use Term::ReadLine;
 
 ##############################################################################
 =pod
@@ -63,22 +63,22 @@ commands:
   CHECK <ID>...        -- mark <ID>.. events as checked (i.e. seen/done)
   UNCHECK <ID>...      -- removed checked mark for <ID>... events
 
-  commands aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME, 
+  commands aliases:  LIST=L,     VIEW=V,  DELETE=DEL, RENAME=NAME,
                      REPEAT=REP, CHECK=C, UNCHECK=U
-       
+
   LIST cmd aliases: ALL=L, DELETED=D, OVERDUE=O, ACTIVE=A, F=FULL
 
 environment configuration:
 
   export RESREI_DEFAULT_DATE_FORMAT=MDY
-  
+
   sets default format for XX.XX.XXXX time specs
   if not specified or other value set, DMY is assumed
 
 timespec specification examples:
 
   specify day in the future:
-  
+
     in 2days 8hrs 11min 23sec
     in 2h
     in 1week
@@ -90,12 +90,12 @@ timespec specification examples:
     on 2021 march 1st at noon
 
   specify exact time:
-  
+
     at 11
     at 2:30 pm
 
   specify day and time in the future:
-  
+
     next tue at 12:00
     next apr 1st
 
@@ -116,7 +116,7 @@ END_OF_HELP
 
 my %__PC_COLORS =
                    (
-                      # foregrounds 
+                      # foregrounds
                       'fk' => '0;30', #blacK
                       'fr' => '0;31', #Red
                       'fg' => '0;32', #Green
@@ -126,7 +126,7 @@ my %__PC_COLORS =
                       'fc' => '0;36', #Cyan
                       'fw' => '0;37', #White
 
-                      # high foregrounds 
+                      # high foregrounds
                       'fK' => '0;90', #blacK
                       'fR' => '0;91', #Red
                       'fG' => '0;92', #Green
@@ -136,7 +136,7 @@ my %__PC_COLORS =
                       'fC' => '0;96', #Cyan
                       'fW' => '0;97', #White
 
-                      # backgrounds 
+                      # backgrounds
                       'bk' => '40', 	#blacK
                       'br' => '41', 	#Red
                       'bg' => '42', 	#Green
@@ -146,7 +146,7 @@ my %__PC_COLORS =
                       'bc' => '46', 	#Cyan
                       'bw' => '47', 	#White
 
-                      # hight backgrounds 
+                      # hight backgrounds
                       'bK' => '0;100', 	#blacK
                       'bR' => '0;101', 	#Red
                       'bG' => '0;102', 	#Green
@@ -158,7 +158,7 @@ my %__PC_COLORS =
                    );
 
 my %WEEK_DAYS_SHORT = (
-                
+
                 mon => 1,
                 tue => 2,
                 wed => 3,
@@ -166,11 +166,11 @@ my %WEEK_DAYS_SHORT = (
                 fri => 5,
                 sat => 6,
                 sun => 7,
-                
+
                 );
 
 my %WEEK_DAYS_LONG = (
-                
+
                 monday    => 1,
                 tuesday   => 2,
                 wednesday => 3,
@@ -178,13 +178,13 @@ my %WEEK_DAYS_LONG = (
                 friday    => 5,
                 saturday  => 6,
                 sunday    => 7,
-                
+
                 );
-                
+
 my %WEEK_DAYS = ( %WEEK_DAYS_SHORT, %WEEK_DAYS_LONG );
 
 my %MONTHS_SHORT = (
-                
+
                 jan  =>  1,
                 feb  =>  2,
                 mar  =>  3,
@@ -198,9 +198,9 @@ my %MONTHS_SHORT = (
                 oct  => 10,
                 nov  => 11,
                 dec  => 12,
-                
+
                 );
-                
+
 my %MONTHS_LONG = (
                 january   =>  1,
                 february  =>  2,
@@ -214,12 +214,81 @@ my %MONTHS_LONG = (
                 october   => 10,
                 november  => 11,
                 december  => 12,
-                
+
                 );
 
 my %MONTHS = ( %MONTHS_SHORT, %MONTHS_LONG );
-                
-my @AC_WORDS = ( qw[ in on at next repeat noon day days year years yearly month months am pm ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
+
+my %TYPES = (
+                h         => 'h',
+                hr        => 'h',
+                hrs       => 'h',
+                hour      => 'h',
+                hours     => 'h',
+
+                m         => 'm',
+                mi        => 'm',
+                min       => 'm',
+                mins      => 'm',
+                minute    => 'm',
+                minutes   => 'm',
+
+                s         => 's',
+                se        => 's',
+                sec       => 's',
+                secs      => 's',
+                second    => 's',
+                seconds   => 's',
+
+                y         => 'Y',
+                yr        => 'Y',
+                yrs       => 'Y',
+                year      => 'Y',
+                years     => 'Y',
+
+                m         => 'M',
+                mo        => 'M',
+                mos       => 'M',
+                mon       => 'M',
+                mons      => 'M',
+                month     => 'M',
+                months    => 'M',
+
+                d         => 'D',
+                day       => 'D',
+                days      => 'D',
+
+                w         => 'W',
+                wk        => 'W',
+                wks       => 'W',
+                week      => 'W',
+                weeks     => 'W',
+
+            );
+
+# downgrade types, 6.5 days => 156 hours, 1.33 months => 40 days (approx.) etc.
+my %TYPES_DG = (
+                Y         => 'M',
+                M         => 'D',
+                D         => 'h',
+                W         => 'h',
+                h         => 'm',
+                m         => 's',
+            );
+
+# downgrade types quantities in the upper type, days (in a month) averaged to 30 days, 60 seconds in a minute, etc.
+my %TYPES_DQ = (
+                Y         =>  12,
+                M         =>  30,
+                D         =>  24,
+                W         => 168,
+                h         =>  60,
+                m         =>  60,
+            );
+
+# autocomplete
+my @AC_COMMANDS = ( qw[ new delete list move rename repeat view check uncheck help ] );
+my @AC_WORDS    = ( qw[ in on at next repeat noon day days year years yearly month months am pm ], keys %WEEK_DAYS_LONG, keys %MONTHS_LONG );
 
 my %LIST_TYPES = (
                  'all'     => 'all',
@@ -313,21 +382,22 @@ if( @args or @args2 )
 else
   {
   go_interactive();
-  }  
+  }
 
 
 sub go_interactive
 {
   my $nows = scalar localtime time;
   pc( "welcome to ^R^RES^C^REI^^ current time is ^Y^$nows\n" );
-  
+
   while(4)
     {
-    my $line = getline( "^R^res^C^rei^^: " );
+#    my $line = getline( "^R^res^C^rei^^:" );
+    my $line = getline( "resrei:" );
     my @line = split /\s+/, $line;
     my $cmd = shift @line;
     next unless $cmd;
-    
+
     last if $cmd =~ /^(q|x|quit|exit|zz)/i;
 
     exec_cmd( $cmd, \@line );
@@ -360,7 +430,7 @@ sub exec_cmd
 sub cmd_help
 {
   my $args = shift;
-  
+
   print $HELP;
 }
 
@@ -369,16 +439,16 @@ sub cmd_new
   my $args  = shift || [];
   my $args2 = shift || [];
 
-  my $create_args = join( ' ', @args, '--', @args2 );
+  my $create_args = join( ' ', @$args, '--', @$args2 );
 
   my ( $time, $repeat ) = parse_time( @$args );
   my $nows = scalar localtime( time() );
   my $tens = scalar localtime( $time  );
   my $diff = unix_time_diff_in_words_relative( time() - $time );
-  
+
   pc( "current time: ^Y^$nows" );
   pc( "target time:  ^G^$tens^^  $diff" );
-  
+
   if( $repeat )
     {
     my $repeat_str = repeat_time_str( $repeat );
@@ -386,20 +456,20 @@ sub cmd_new
     }
 
   my $name;
-  
+
   if( $args2 and @$args2 )
     {
     $name = join( ' ', @$args2 )
     }
-  
+
   if( ! $name )
     {
-    $name = getline( "new event name: " );
+    $name = getline( "new event name:" );
     }
   else
     {
     print "event name:   $name\n";
-    }  
+    }
 
 
   if( ! confirm( "save this event?" ) )
@@ -407,20 +477,20 @@ sub cmd_new
     print "cancelled.\n";
     return;
     }
-    
+
   my $data = db_create_new();
-  
-  $data->{ 'NAME'        } = $name;  
-  $data->{ 'TTIME'       } = $time;  
+
+  $data->{ 'NAME'        } = $name;
+  $data->{ 'TTIME'       } = $time;
   $data->{ 'TTIME_STR'   } = scalar localtime $time;
-  $data->{ 'TREPEAT'     } = $repeat;  
-  $data->{ 'CTIME'       } = time();  
-  $data->{ 'CTIME_STR'   } = scalar localtime( time() );   
+  $data->{ 'TREPEAT'     } = $repeat;
+  $data->{ 'CTIME'       } = time();
+  $data->{ 'CTIME_STR'   } = scalar localtime( time() );
   $data->{ 'CREATE_ARGS' } = $create_args;
 
   db_save( $data );
   my $id = $data->{ ':ID' };
-    
+
   pc( "saved. id = ^R^ $id ^^\n" );
 }
 
@@ -429,18 +499,18 @@ sub cmd_del
   my $args = shift;
 
   my $count = list_events( 'all', @$args  );
-  
+
   return pc( "no events to delete" ) unless $count;
   return unless confirm( "delete listed events?" );
 
   for my $id ( @$args )
     {
     my $data = db_load( $id ) or next;
-    next if $data->{ ':DELETED' };  
+    next if $data->{ ':DELETED' };
     $data->{ ':DELETED' } = time();
     db_save( $data );
     }
-  
+
   pc( "^Wr^ DELETED! ^^ (use 'list deleted' to view deleted)" );
 }
 
@@ -465,7 +535,7 @@ sub cmd_check
       my $yr = $repeat->{ 'YEARS'   } || 0;
 
       my $tt = $data->{ 'TTIME' };
-      
+
       while(4)
         {
         $tt = utime_add_ymdhms( $tt, $yr, $mo, 0, 0, 0, $ss );
@@ -474,12 +544,12 @@ sub cmd_check
 
       $data->{ 'TTIME'     } = $tt;
       $data->{ 'TTIME_STR' } = scalar localtime $tt;
-      
+
       }
     else
       {
       $data->{ 'CHECKED' } = time();
-      }  
+      }
     $data->{ 'CHECKED_TIMES' } ||= [];
     unshift @{ $data->{ 'CHECKED_TIMES' } }, time();
 
@@ -512,19 +582,19 @@ sub cmd_uncheck
 sub cmd_list
 {
   my $args = shift;
-  
+
   my $type = $LIST_TYPES{ shift @$args } || 'all';
 
   return pc( "unknown list type [$type] expected one of: all, deleted, overdue" ) unless $type;
 
   my $list = db_list();
-  
+
   @$list = sort { $a <=> $b } @$list;
   @$list = sort { db_ttime( $a ) <=> db_ttime( $b ) } @$list if $type eq 'active' or $type eq 'overdue';
   @$list = sort { db_name( $a )  cmp db_name( $b )  } @$list if $type eq 'full';
 
   my $count = list_events( $type, @$list );
-  
+
   return pc( "no events of type '$type' to list" ) unless $count or $opt_quiet;
 }
 
@@ -537,17 +607,17 @@ sub list_events
   for my $id ( @ev )
     {
     my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
-    
+
     my $ttime = $data->{ 'TTIME' };
-    
+
     if( $type eq 'overdue' )
       {
       next if $data->{ ':DELETED' } or $data->{ 'CHECKED' };
-      next if $ttime > time(); 
+      next if $ttime > time();
       }
     elsif( $type eq 'deleted' )
       {
-      next unless $data->{ ':DELETED' };  
+      next unless $data->{ ':DELETED' };
       }
     elsif( $type eq 'active' )
       {
@@ -557,33 +627,33 @@ sub list_events
     else
       {
       # all
-      next if $data->{ ':DELETED' };  
-      }  
-    
+      next if $data->{ ':DELETED' };
+      }
+
 #     my $tdiff  = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
-    
-    
+
+
     my $stdiff = short_time_diff( time() - $ttime );
     my $tdiff;
-    
+
     $tdiff  = "^G^  IN $stdiff ^^"  if $ttime >  time();
     $tdiff  = "^Wr^ DUE $stdiff ^^" if $ttime <= time();
     $tdiff  = "^rw^ DUE $stdiff ^^" if time() - $ttime > 7*24*60*60;
-    
+
     my $ttimes = strftime( "%a %b %d %H:%M %Y", localtime( $ttime ) );
     my $name   = $data->{ 'NAME'     };
     my $repeat = $data->{ 'TREPEAT'  } ? "^C^R^^" : ' ';
     my $del    = $data->{ ':DELETED' } ? "^R^D^^" : ' ';
     my $ggc    = $count % 2 ? 'y' : 'w';
     my $ids    = sprintf( "%3d", $id );
-    
+
     $tdiff     = "^Wg^   CHECKED   ^^" if $data->{ 'CHECKED' };
     pc( "^c^$ids ^$ggc^$ttimes^^$repeat$del$tdiff ^c^$ids ^$ggc^$name");
-    
+
     $count++;
     }
-  
-  return $count;  
+
+  return $count;
 }
 
 sub cmd_move
@@ -599,12 +669,12 @@ sub cmd_move
   my $nows = scalar localtime( $data->{ 'TTIME'       } );
   my $tens = scalar localtime( $time  );
   my $diff = unix_time_diff_in_words_relative( time() - $time );
-  
+
   pc( "current event time: ^Y^$nows" );
   pc( "move to new   time: ^G^$tens^^  $diff" );
 
   return unless confirm( "confirm new target time?" );
-  
+
   $data->{ 'TTIME'     } = $time;
   $data->{ 'TTIME_STR' } = scalar localtime $time;
   db_save( $data );
@@ -647,19 +717,19 @@ sub cmd_repeat
     my $repeat_str = repeat_time_str( $repeat );
     pc( "will repeat every ^C^$repeat_str" );
     }
-  
+
   return unless confirm( "confirm new repeat time?" );
-  
+
   my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
 
-  $data->{ 'TREPEAT' } = $repeat;  
+  $data->{ 'TREPEAT' } = $repeat;
   db_save( $data );
 }
 
 sub cmd_view
 {
   my $args = shift;
-  
+
   $args = [ $args ] unless ref( $args ) eq 'ARRAY';
 
   for my $id ( @$args )
@@ -675,9 +745,9 @@ sub cmd_view
     my $mtime   = $data->{ 'MTIME' };
     my $mtime_s = $data->{ 'MTIME_STR' };
     my $deleted = $data->{ ':DELETED' };
-    
+
     my $deleted_s = scalar localtime $deleted;
-   
+
     my $tdiff = ( $ttime < time() ? "^Wr^ DUE " : "^G^  IN " ) . short_time_diff( time() - $ttime ) . " ^^";
     my $repeat_str = repeat_time_str( $data->{ 'TREPEAT' } ) if $data->{ 'TREPEAT' };
 
@@ -694,7 +764,7 @@ sub cmd_view
     print Dumper( $data ) if $DEBUG > 0;
     print "-----------------------------------------\n";
     }
-  
+
 }
 
 ##############################################################################
@@ -705,11 +775,11 @@ sub getline
 
   if( ! $READLINE )
     {
-    $READLINE = Term::ReadLine::Tiny->new( "" );
-    $READLINE->autocomplete( \&autocomplete );
+    $READLINE = Term::ReadLine->new( "resrei" );
+    $READLINE->Attribs->{ 'completion_function' } = \&autocomplete;
     }
 
-  my $input = $READLINE->readline( ec( $prompt ) );
+  my $input = $READLINE->readline( $prompt . ' ' );
   $input =~ s/^//g; # remove colors :))
   return $input;
 }
@@ -722,12 +792,12 @@ sub confirm
   return 1 if $opt_always_yes;
 
   print "\n";
-  my $commit = getline( "$prompt Yes/No? " );
+  my $commit = getline( "$prompt Yes/No?" );
   print "\n";
   return $commit =~ /^Y(ES)?$/i ? 1 : 0;
 }
 
-# print color, escapes are: 
+# print color, escapes are:
 # ^ fg bg? ^
 # ^^ -- reset colors to default
 # examples:  ^Wr^ high-white on red background
@@ -736,7 +806,7 @@ sub confirm
 sub pc
 {
   my $msg = shift;
-  
+
   print ec( $msg ), "\n";
   return undef;
 }
@@ -744,9 +814,10 @@ sub pc
 sub ec
 {
   my $msg = shift;
-  
+
   $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
   $msg .= "\e[0m" unless $opt_no_colors;
+
   return $msg;
 }
 
@@ -759,12 +830,12 @@ sub __pc
 
   $fg = $__PC_COLORS{ "f$fg" };
   $bg = $__PC_COLORS{ "b$bg" };
-  
+
   $fg = '0'       if ! $fg;
   $bg = ';' . $bg if   $bg;
 
   return "\e[${fg}${bg}m";
-} 
+}
 
 ### DB #######################################################################
 
@@ -781,7 +852,7 @@ sub db_create_new
 
   my $id;
   my $fn;
-  
+
   while(4)
     {
     $id = $id + 1;
@@ -789,12 +860,12 @@ sub db_create_new
     next if -e $fn;
     last if sysopen my $F, $fn, O_CREAT | O_EXCL, 0600;
     $fn = undef;
-    }  
+    }
 
   die "cannot create new data file in [$DATA_DIR]\n" unless $fn;
 
   $data{ ':ID' } = $id;
-  
+
   return \%data;
 }
 
@@ -802,9 +873,9 @@ sub db_list
 {
   my $order = shift; # [A]lpha, [N]um, [M]time, [R]eversed
   my @list;
-  
+
   @list = sort map { file_name( $_ ) } glob "$DATA_DIR/*.rrdata";
-  
+
   return \@list;
 }
 
@@ -843,7 +914,7 @@ sub db_get_history
 sub db_ttime
 {
   my $id   = shift;
-  
+
   my $data = db_load( $id );
   return 0 unless $data;
 
@@ -853,7 +924,7 @@ sub db_ttime
 sub db_name
 {
   my $id   = shift;
-  
+
   my $data = db_load( $id );
   return undef unless $data;
 
@@ -864,37 +935,29 @@ sub db_name
 
 sub autocomplete
 {
-  my $rl   = shift;
-  my $text = shift;
-  
-  return $text unless $text =~ /\d*(\S+?)$/;
-  my $co = $1;
+  my ( $text, $line, $start ) = @_;
 
-  my @rc = grep /^$co/, @AC_WORDS;
-
-  return $text unless @rc;
-  
-  if( @rc == 1 )
+  my @rc;
+  if( $line =~ /^\s*(\S*)$/ )
     {
-    $text .= substr( $rc[0], length( $co ) ) . ' ';
+    @rc = @AC_COMMANDS;
+    return @rc unless $1;
+    my @rc = grep /^$1/, @AC_COMMANDS;
+    return @rc;
     }
-  else
-    {
-    print "\n@rc\nresrei: $text";
-    }  
-  
-  #print Dumper( \@_ );
-  return $text;
+
+  @rc = grep /^$1/, @AC_WORDS;
+  return @rc;
 }
-                
+
 sub parse_time
 {
   my $ta = [ @_ ];
-  
+
   my $now = time();
   my $ts = $now;
   my $tr;
-  
+
   while( @$ta )
     {
     $_ = shift @$ta;
@@ -937,7 +1000,7 @@ sub parse_time
     else
       {
       die "invalid timespec at [$_] expected one of [in on next repeat at]\n";
-      }  
+      }
     }
   return ( $ts, $tr );
 }
@@ -945,7 +1008,7 @@ sub parse_time
 sub parse_time_repeat
 {
   my $ta = shift;
-  
+
   my $tr = {};
 
   while( @$ta )
@@ -954,7 +1017,7 @@ sub parse_time_repeat
     my $a = 0;
 
 #print STDERR "repeat: [$_]\n";
-    
+
     if( /^(\d+|a)$/ )
       {
       $a = $1 eq 'a' ? 1 : $1;
@@ -983,7 +1046,7 @@ sub parse_time_repeat
       $tr->{ 'YEARS'   } += 1 if $type eq 'Y';  # years
       next;
       }
-    elsif( /^(\d*)(s(ec(onds?)?)|mi(n(utes?)?)|h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
+    elsif( /^(\d*)(s(ec(onds?)?)|mi(n(utes?)?)|h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h
       {
       my $type = uc substr( $2, 0, 1 );
       $type = uc substr( $2, 1, 1 ) if $type eq 'M';
@@ -997,7 +1060,7 @@ sub parse_time_repeat
       $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
       $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
       $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
-      
+
       $tr->{ 'SECONDS' } += $tt;
 
       $tr->{ 'MONTHS'  } += $add if $type eq 'O'; # months
@@ -1009,9 +1072,9 @@ sub parse_time_repeat
       {
       unshift @$ta, $_;
       return $tr;
-      }  
+      }
     }
-  
+
   return $tr;
 }
 
@@ -1019,13 +1082,13 @@ sub parse_time_on
 {
   my $ta  = shift;
   my $now = shift;
-  
+
   my $day;
   my $mon;
   my $year;
-  
+
   my $a;
-  
+
   while( @$ta )
     {
     $_ = lc shift @$ta;
@@ -1064,7 +1127,7 @@ sub parse_time_on
       {
       unshift @$ta, $_;
       last;
-      }  
+      }
     }
 
 #  print STDERR "DEBUG: *on* year [$year] month [$mon] day [$day]\n";
@@ -1094,14 +1157,14 @@ sub parse_time_on
     else
       {
       return $uc;
-      }  
+      }
     }
-  elsif( $mon > 0 )  
+  elsif( $mon > 0 )
     {
     my $uc = utime_from_ymdhms( $yc, $mon, 1 );
     return $now > $uc ? utime_from_ymdhms( $yc + 1, $mon, 1 ) : $uc;
     }
-  elsif( $day > 0 )  
+  elsif( $day > 0 )
     {
     my ( $yc, $mc ) = utime_to_ymdhms( $now );
     return 0 if $day > get_year_month_days( $yc, $mc );
@@ -1117,14 +1180,14 @@ sub parse_time_on
         {
         return 0 if $day > get_year_month_days( $yc, $mc + 1 );
         return utime_from_ymdhms( $yc, $mc + 1, $day )
-        }  
+        }
       }
     else
       {
       return $uc;
-      }  
+      }
     }
-  elsif( $year > 0 )  
+  elsif( $year > 0 )
     {
     return utime_from_ymdhms( $year, 1, 1 );
     }
@@ -1135,7 +1198,7 @@ sub parse_time_on
 sub parse_time_in
 {
   my $ta = shift;
-  
+
   my $tt;
 
   my $a;
@@ -1143,56 +1206,48 @@ sub parse_time_in
     {
     $_ = lc shift @$ta;
     $a = 0;
-    
+
     if( /^(and)/ )
       {
       next;
       }
-      
-    if( /^(\d+\.?\d*|a)$/ )
-      {
-      $a = $1 eq 'a' ? 1 : $1;
-      $_ = lc shift @$ta;
-print ">>>>>>> tt[$a] [$_]\n";
-      }
-    if( /^(\d*\.?\d*)(h(ours?|rs?)?|d(ays?)?|w(eeks?|wks?)?|mo(n|nths?)?|y(ears?|rs?)?)$/ ) # hours hour hrs hr h 
-      {
-      my $type = uc substr( $2, 0, 1 );
-      my $add = $1 || $a;
 
-      ( $add, $type ) = ( int( $add * ), '' ) if $type eq 'H'; # hours
-      
-      $tt +=          $add * 60 * 60 if $type eq 'H'; # hours
+    if( /^(\d+\.?\d*|(a)n?)$/i )
+      {
+      $a = $2 eq 'a' ? 1 : $1; # a day, a month, an year, an hour
+      $_ = lc shift @$ta;
+      }
+
+    if( /^(\d*\.?\d*)([a-z]+)$/i ) # hours hour hrs hr h
+      {
+        my $add  = $1 || $a;
+        my $type = $TYPES{ lc $2 };
+
+        if( $add > int( $add ) )
+          {
+          my $q = $TYPES_DQ{ $type };
+          $type = $TYPES_DG{ $type };
+          $add  = int( $add * $q );
+          }
+
+      die "unknown time identifier [$2] expected: secs, d, days, mo, months, yrs, etc. check help with -h\n" unless $type;
+
+      $tt +=                    $add if $type eq 's'; # seconds
+      $tt +=               $add * 60 if $type eq 'm'; # minutes
+      $tt +=          $add * 60 * 60 if $type eq 'h'; # hours
       $tt +=     $add * 24 * 60 * 60 if $type eq 'D'; # days
       $tt += $add * 7 * 24 * 60 * 60 if $type eq 'W'; # weeks
-print ">>>>>>> tt[$tt] [$add] [$type]\n";
 
       $tt = utime_add_ymd( $tt, 0, $add, 0 ) if $type eq 'M'; # months
       $tt = utime_add_ymd( $tt, $add, 0, 0 ) if $type eq 'Y';  # years
-print ">>>>>>> tt[$tt] [$add]\n";
-      next;
-      }
-    elsif( /^(\d*)(m(in(utes?)?)?)$/ ) # minutes minute min m
-      {
-      my $add = $1 || $a;
-
-      $tt += $add * 60;
-      next;
-      }
-    elsif( /^(\d*)(s(ec(ond)?s?)?)$/ ) # seconds second secs sec s
-      {
-      my $add = $1 || $a;
-
-      $tt += $add;
-      next;
       }
     else
       {
       unshift @$ta, $_;
       return $tt;
-      }  
+      }
     }
-  
+
   return $tt;
 }
 
@@ -1201,7 +1256,7 @@ sub parse_time_next
 {
   my $ta  = shift;
   my $now = shift;
-  
+
   my $tt;
 
   while( @$ta )
@@ -1210,17 +1265,17 @@ sub parse_time_next
     if( my $day = $WEEK_DAYS{ lc $_ } )
       {
       my $nod = utime_get_dow( $now );
-      
+
       my $diffd = $day > $nod ? $day - $nod : $day + 7 - $nod;
-      
+
       return utime_goto_midnight( $now ) + $diffd * 24 * 60 * 60;
       }
     elsif( my $mon = $MONTHS{ lc $_ } )
       {
       my $nom = utime_get_moy( $now );
-      
+
       my $diffm = $mon > $nom ? $mon - $nom : $mon + 12 - $nom;
-      
+
       return utime_goto_first_dom( utime_add_ymd( utime_goto_midnight( $now ), 0, $diffm, 0 ) );
       }
     elsif( /^year$/i )
@@ -1240,16 +1295,16 @@ sub parse_time_next
       unshift @$ta, $_;
       return $tt;
       #die "invalid timespec during *NEXT* [$_]\n";
-      }  
+      }
     }
-  
+
   return $tt;
 }
 
 sub parse_time_at
 {
   my $ta = shift;
-  
+
   my $tt;
 
   while( @$ta )
@@ -1263,9 +1318,9 @@ sub parse_time_at
       my $p = uc $6;
 
       $p = uc shift @$ta if ! $p and $ta->[0] =~ /^am|pm$/i;
-      
+
       $h += 12 if $p eq 'PM' and $h >= 0 and $h <= 12;
-      
+
       $tt = $h * 60 * 60 + $m * 60 + $s;
       }
     elsif( lc $_ eq 'noon' )
@@ -1281,9 +1336,9 @@ sub parse_time_at
       unshift @$ta, $_;
       return $tt;
       # die "invalid timespec during *AT* [$_]\n";
-      }  
+      }
     }
-  
+
   return $tt;
 }
 
@@ -1301,7 +1356,7 @@ sub repeat_time_str
   my $m = int( ( $ss % ( 60*60    ) ) /   60      );
   my $s = int(   $ss %   60         );
   my $repeat_str;
-  
+
   my @repeat;
   push @repeat, __oms( $yr, "year",   "years"   ) if $yr > 0;
   push @repeat, __oms( $mo, "month",  "months"  ) if $mo > 0;
@@ -1316,7 +1371,7 @@ sub repeat_time_str
 sub short_time_diff
 {
   my $diff = abs( shift );
-  
+
   my $d = int( $diff / (     24*60*60 ) );
   my $o = int( $diff / (  30*24*60*60 ) );
   my $y = int( $diff / ( 365*24*60*60 ) );
@@ -1324,7 +1379,7 @@ sub short_time_diff
   return __om( $y, "yr", "yrs" ) if $o > 14;
 
   return __om( $o, "mo", "mos" ) if $d > 64;
-  
+
   return __om( $d, "day", "days" ) if $d > 0;
 
   my $h = int( $diff / ( 60*60 ) );
