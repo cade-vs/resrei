@@ -11,7 +11,7 @@
 use strict;
 use POSIX;
 use Data::Dumper;
-use Time::HiRes;
+#use Time::HiRes;
 use Data::Tools;
 use Data::Tools::Time;
 use Data::Stacker;
