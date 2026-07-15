@@ -369,6 +369,9 @@ while( @ARGV )
   push @args, $_;
   }
 
+# disable colors when NO_COLOR is set (https://no-color.org/) or output is not a terminal
+$opt_no_colors = 1 if ( defined $ENV{ 'NO_COLOR' } and $ENV{ 'NO_COLOR' } ne '' ) or ! -t STDOUT;
+
 dir_path_ensure( $DATA_DIR ) or die "fatal: cannot access data dir [$DATA_DIR]\n";
 print STDERR "using data dir: [$DATA_DIR]\n" if $DEBUG;
 
@@ -905,9 +908,14 @@ sub db_save
 {
   my $data = shift;
 
-  my $id = $data->{ ':ID' };
-  my $fn = __make_id_fn( $id );
-  return file_save( $fn, stack_data( $data ) ) or return undef;
+  my $id  = $data->{ ':ID' };
+  my $fn  = __make_id_fn( $id );
+  my $tmp = "$fn.tmp.$$";
+
+  file_save( $tmp, stack_data( $data ) ) or return undef;
+  chmod 0600, $tmp;                                    # match db_create_new perms
+  rename( $tmp, $fn ) or do { unlink $tmp; return undef; };
+  return 1;
 }
 
 sub db_get_history
