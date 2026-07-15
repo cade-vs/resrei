@@ -246,7 +246,6 @@ my %TYPES = (
                 year      => 'Y',
                 years     => 'Y',
 
-                m         => 'M',
                 mo        => 'M',
                 mos       => 'M',
                 mon       => 'M',
@@ -394,13 +393,15 @@ sub go_interactive
     {
 #    my $line = getline( "^R^res^C^rei^^:" );
     my $line = getline( "resrei:" );
+    last unless defined $line;              # EOF (Ctrl-D) quits
     my @line = split /\s+/, $line;
     my $cmd = shift @line;
     next unless $cmd;
 
     last if $cmd =~ /^(q|x|quit|exit|zz)/i;
 
-    exec_cmd( $cmd, \@line );
+    eval { exec_cmd( $cmd, \@line ) };
+    pc( "^Wr^ error ^^ $@" ) if $@;
     }
 }
 
@@ -419,7 +420,7 @@ sub exec_cmd
   return cmd_move( $args )           if $cmd =~ /^m(ove)?/i;
   return cmd_rename( $args, $args2 ) if $cmd =~ /^(re)?name/i;
   return cmd_repeat( $args )         if $cmd =~ /^rep(eat)?/i;
-  return cmd_view( [ $1 ] )          if $cmd =~ /^(\d+)/i;
+  return cmd_view( [ $1, @$args ] )  if $cmd =~ /^(\d+)/i;
   return cmd_view( $args )           if $cmd =~ /^v(iew)?/i;
   return cmd_check( $args )          if $cmd =~ /^c(heck)?/i;
   return cmd_uncheck( $args )        if $cmd =~ /^u(n(c(heck)?)?)?/i;
@@ -605,7 +606,7 @@ sub list_events
   my $count;
   for my $id ( @ev )
     {
-    my $data = db_load( $id ) or return pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded");
+    my $data = db_load( $id ) or do { pc( "^R^ $id ^^ ^Wr^event does not exists or cannot be loaded" ); next; };
 
     my $ttime = $data->{ 'TTIME' };
 
@@ -779,6 +780,7 @@ sub getline
     }
 
   my $input = $READLINE->readline( ec( $prompt ) );
+  return undef unless defined $input;              # EOF (Ctrl-D)
   $input =~ s/\^(([krgybpcw])([krgybpcw])?)?\^//g; # remove color markup :))
   return $input;
 }
@@ -936,17 +938,11 @@ sub autocomplete
 {
   my ( $text, $line, $start ) = @_;
 
-  my @rc;
-  if( $line =~ /^\s*(\S*)$/ )
-    {
-    @rc = @AC_COMMANDS;
-    return @rc unless $1;
-    my @rc = grep /^$1/, @AC_COMMANDS;
-    return @rc;
-    }
+  # first word (nothing typed after it yet) => command names;
+  # subsequent words => timespec keywords
+  my @words = $line =~ /^\s*\S*$/ ? @AC_COMMANDS : @AC_WORDS;
 
-  @rc = grep /^$1/, @AC_WORDS;
-  return @rc;
+  return grep /^\Q$text\E/, @words;
 }
 
 sub parse_time
@@ -970,7 +966,7 @@ sub parse_time
       next if $ta->[0] eq 'next';
       $ts = parse_time_on( $ta, $now );
       my $tss = $ts > 0 ? scalar localtime $ts : 'n/a';
-      die "cannot set time in the past [$tss]\n" if $ts > 0 and $ts < $now;
+      die "cannot set time in the past [$tss]\n" if $ts > 0 and $ts < $now and ! $opt_allow_past;
       die "invalid date/time, expected timespec in the future, use -p to override\n" if ! $opt_allow_past and $ts < $now;
       next;
       }
@@ -1318,7 +1314,8 @@ sub parse_time_at
 
       $p = uc shift @$ta if ! $p and $ta->[0] =~ /^(am|pm)$/i;
       
-      $h += 12 if $p eq 'PM' and $h >= 0 and $h <= 12;
+      $h  = 0  if $p eq 'AM' and $h == 12;             # 12am -> 00:00
+      $h += 12 if $p eq 'PM' and $h >= 1 and $h <= 11; # 1-11pm -> +12; 12pm stays 12
 
       $tt = $h * 60 * 60 + $m * 60 + $s;
       }
