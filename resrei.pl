@@ -401,7 +401,11 @@ sub go_interactive
     last if $cmd =~ /^(q|x|quit|exit|zz)/i;
 
     eval { exec_cmd( $cmd, \@line ) };
-    pc( "^Wr^ error ^^ $@" ) if $@;
+    if( $@ )
+      {
+      ( my $err = $@ ) =~ s/\s+$//;          # drop trailing newline
+      print ec( "^Wr^ error ^^ " ), "$err\n"; # print message raw, not as color markup
+      }
     }
 }
 
@@ -1218,7 +1222,7 @@ sub parse_time_in
         my $add  = $1 || $a;
         my $type = $TYPES{ lc $2 };
 
-        if( $add > int( $add ) )
+        if( $add > int( $add ) and $TYPES_DG{ $type } )
           {
           my $q = $TYPES_DQ{ $type };
           $type = $TYPES_DG{ $type };
