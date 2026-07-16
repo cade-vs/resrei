@@ -391,11 +391,12 @@ sub go_interactive
 {
   my $nows = scalar localtime time;
   pc( "welcome to ^R^RES^C^REI^^ current time is ^Y^$nows\n" );
+  print "type 'quit' or Ctrl+D to exit\n";
 
   while(4)
     {
 #    my $line = getline( "^R^res^C^rei^^:" );
-    my $line = getline( "resrei:" );
+    my $line = getline( "resrei: " );
     last unless defined $line;              # EOF (Ctrl-D) quits
     my @line = split /\s+/, $line;
     my $cmd = shift @line;
@@ -410,6 +411,8 @@ sub go_interactive
       print ec( "^Wr^ error ^^ " ), "$err\n"; # print message raw, not as color markup
       }
     }
+
+  print "\n\n";
 }
 
 ### COMMANDS #################################################################
@@ -786,7 +789,7 @@ sub getline
     $READLINE->Attribs->{ 'completion_function' } = \&autocomplete;
     }
 
-  my $input = $READLINE->readline( ec( $prompt ) );
+  my $input = $READLINE->readline( $prompt );
   return undef unless defined $input;              # EOF (Ctrl-D)
   $input =~ s/\^(([krgybpcw])([krgybpcw])?)?\^//g; # remove color markup :))
   return $input;
@@ -1325,7 +1328,7 @@ sub parse_time_at
       my $p = uc $6;
 
       $p = uc shift @$ta if ! $p and $ta->[0] =~ /^(am|pm)$/i;
-      
+
       $h  = 0  if $p eq 'AM' and $h == 12;             # 12am -> 00:00
       $h += 12 if $p eq 'PM' and $h >= 1 and $h <= 11; # 1-11pm -> +12; 12pm stays 12
 
