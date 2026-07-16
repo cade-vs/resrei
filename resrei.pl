@@ -826,8 +826,8 @@ sub ec
 {
   my $msg = shift;
 
-  $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie;
-  $msg .= "\e[0m" unless $opt_no_colors;
+  my $n = ( $msg =~ s/\^(([krgybpcw])([krgybpcw])?)?\^/__pc($2,$3)/gie );
+  $msg .= "\e[0m" if $n and ! $opt_no_colors; # only reset when a color was actually emitted
 
   return $msg;
 }
@@ -863,6 +863,7 @@ sub db_create_new
 
   my $id;
   my $fn;
+  my $fails = 0;
 
   while(4)
     {
@@ -871,6 +872,7 @@ sub db_create_new
     next if -e $fn;
     last if sysopen my $F, $fn, O_CREAT | O_EXCL, 0600;
     $fn = undef;
+    die "cannot create new data file in [$DATA_DIR]: $!\n" if ++$fails >= 100;
     }
 
   die "cannot create new data file in [$DATA_DIR]\n" unless $fn;
@@ -910,6 +912,9 @@ sub db_load
 sub db_save
 {
   my $data = shift;
+
+  $data->{ 'MTIME'     } = time();               # stamp modification time on every save
+  $data->{ 'MTIME_STR' } = scalar localtime time();
 
   my $id  = $data->{ ':ID' };
   my $fn  = __make_id_fn( $id );
