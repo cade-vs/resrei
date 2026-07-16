@@ -11,7 +11,6 @@
 use strict;
 use POSIX;
 use Data::Dumper;
-#use Time::HiRes;
 use Data::Tools;
 use Data::Tools::Time;
 use Data::Stacker;
@@ -789,7 +788,7 @@ sub getline
     $READLINE->Attribs->{ 'completion_function' } = \&autocomplete;
     }
 
-  my $input = $READLINE->readline( $prompt );
+  my $input = $READLINE->readline( $prompt . '> ' );
   return undef unless defined $input;              # EOF (Ctrl-D)
   $input =~ s/\^(([krgybpcw])([krgybpcw])?)?\^//g; # remove color markup :))
   return $input;
@@ -803,7 +802,8 @@ sub confirm
   return 1 if $opt_always_yes;
 
   print "\n";
-  my $commit = getline( "$prompt Yes/No?" );
+  pc( $prompt );
+  my $commit = getline( "Yes/No?" );
   print "\n";
   return $commit =~ /^Y(ES)?$/i ? 1 : 0;
 }
